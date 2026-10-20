@@ -7,13 +7,30 @@ import pytest
 from eaa.ingestion import eco2mix
 
 
-def _page(rows: list[dict]) -> object:
+def _page(rows: list[dict], status_code: int = 200) -> object:
     class _Response:
+        def __init__(self) -> None:
+            self.status_code = status_code
+
         def raise_for_status(self) -> None:
             return None
 
         def json(self) -> dict:
             return {"results": rows}
+
+    return _Response()
+
+
+def _bad_page(body: dict, status_code: int = 429) -> object:
+    class _Response:
+        def __init__(self) -> None:
+            self.status_code = status_code
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return body
 
     return _Response()
 
@@ -134,3 +151,10 @@ def test_production_mix_hourly_keeps_nan_row_for_a_gap_hour() -> None:
     # timestamp doesn't exist", breaking symmetry with consumption_hourly.
     assert set(gap_rows["source"]) == {"nuclear", "wind", "solar", "hydro", "gas"}
     assert gap_rows["production_mw"].isna().all()
+
+
+def test_fetch_records_raises_runtime_error_on_missing_results_key() -> None:
+    with patch("eaa.ingestion.eco2mix.requests.get") as mock_get:
+        mock_get.return_value = _bad_page({"error": "rate limited"})
+        with pytest.raises(RuntimeError, match=eco2mix.TR_DATASET):
+            eco2mix.fetch_records(eco2mix.TR_DATASET, date(2026, 1, 1), date(2026, 1, 1))

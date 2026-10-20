@@ -60,7 +60,13 @@ def fetch_records(dataset: str, start_date: date, end_date: date) -> pd.DataFram
             timeout=30,
         )
         response.raise_for_status()
-        page = response.json()["results"]
+        body = response.json()
+        if "results" not in body:
+            raise RuntimeError(
+                f"éCO2mix response for dataset={dataset!r} cursor={cursor!r} missing "
+                f"'results' key (HTTP {response.status_code}): {body!r}"
+            )
+        page = body["results"]
         if not page:
             break
 
