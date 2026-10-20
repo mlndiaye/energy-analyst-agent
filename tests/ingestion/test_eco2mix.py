@@ -89,3 +89,48 @@ def test_production_mix_hourly_melts_to_long_format_with_english_names() -> None
     assert set(result["source"]) == {"nuclear", "wind", "solar", "hydro", "gas"}
     nuclear_row = result[result["source"] == "nuclear"].iloc[0]
     assert nuclear_row["production_mw"] == 41000.0
+
+
+def test_consumption_hourly_keeps_nan_row_for_a_gap_hour() -> None:
+    raw = pd.DataFrame(
+        {
+            "date_heure": [
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:30:00+00:00",
+                # no data at all for the 01:00 hour
+                "2026-01-01T02:00:00+00:00",
+                "2026-01-01T02:30:00+00:00",
+            ],
+            "consommation": ["100", "120", "200", "220"],
+        }
+    )
+    result = eco2mix.consumption_hourly(raw)
+    assert len(result) == 3
+    gap_row = result[result["datetime"] == pd.Timestamp("2026-01-01 01:00:00")].iloc[0]
+    assert pd.isna(gap_row["consumption_mw"])
+
+
+def test_production_mix_hourly_keeps_nan_row_for_a_gap_hour() -> None:
+    raw = pd.DataFrame(
+        {
+            "date_heure": [
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:30:00+00:00",
+                # no data at all for the 01:00 hour
+                "2026-01-01T02:00:00+00:00",
+                "2026-01-01T02:30:00+00:00",
+            ],
+            "nucleaire": ["40000", "42000", "41000", "41500"],
+            "eolien": ["3000", "3200", "3100", "3150"],
+            "solaire": ["0", "0", "0", "0"],
+            "hydraulique": ["5000", "5100", "5050", "5075"],
+            "gaz": ["2000", "2100", "2050", "2075"],
+        }
+    )
+    result = eco2mix.production_mix_hourly(raw)
+    gap_rows = result[result["datetime"] == pd.Timestamp("2026-01-01 01:00:00")]
+    # The gap hour must still be present, as a NaN-valued row, for every source --
+    # not silently dropped. A dropped row would be indistinguishable from "this
+    # timestamp doesn't exist", breaking symmetry with consumption_hourly.
+    assert set(gap_rows["source"]) == {"nuclear", "wind", "solar", "hydro", "gas"}
+    assert gap_rows["production_mw"].isna().all()

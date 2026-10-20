@@ -110,4 +110,8 @@ def production_mix_hourly(df: pd.DataFrame) -> pd.DataFrame:
         id_vars="datetime", value_vars=source_cols, var_name="source_fr", value_name="production_mw"
     )
     long_df["source"] = long_df["source_fr"].map(SOURCE_FIELDS)
-    return long_df[["datetime", "source", "production_mw"]].dropna(subset=["production_mw"])
+    # Keep NaN-valued rows for gap hours (symmetric with consumption_hourly):
+    # a NaN row means "no data reported for this hour", a missing row would
+    # wrongly mean "this timestamp doesn't exist", breaking joins/counts
+    # across the warehouse's hourly tables.
+    return long_df[["datetime", "source", "production_mw"]]
