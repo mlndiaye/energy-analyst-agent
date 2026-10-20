@@ -192,3 +192,28 @@ def test_backfill_chains_cons_def_and_tr_and_upserts(tmp_path) -> None:
     con.close()
     assert consumption_rows > 0
     assert mix_rows > 0
+
+
+def test_backfill_bounds_cons_def_fetch_by_end_date_when_entirely_before_tr_window(
+    tmp_path,
+) -> None:
+    con = warehouse.get_connection(tmp_path / "test.duckdb")
+    today = date(2026, 6, 1)
+
+    with (
+        patch("eaa.ingestion.eco2mix.fetch_records", return_value=pd.DataFrame()) as mock_fetch,
+        patch("eaa.ingestion.eco2mix._today", return_value=today),
+    ):
+        eco2mix.backfill(con, date(2024, 1, 1), date(2024, 6, 1))
+    con.close()
+
+    calls_by_dataset = {call.args[0]: call.args for call in mock_fetch.call_args_list}
+    # The whole requested range is older than the TR window, so only cons-def
+    # should be fetched -- and its end date must not run past the caller's
+    # requested end_date.
+    assert eco2mix.TR_DATASET not in calls_by_dataset
+    assert calls_by_dataset[eco2mix.CONS_DEF_DATASET] == (
+        eco2mix.CONS_DEF_DATASET,
+        date(2024, 1, 1),
+        date(2024, 6, 1),
+    )

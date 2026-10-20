@@ -141,7 +141,8 @@ def backfill(con, start_date: date, end_date: date) -> None:
     tr_start = max(start_date, _today() - timedelta(days=TR_WINDOW_DAYS))
 
     if start_date < tr_start:
-        df = fetch_records(CONS_DEF_DATASET, start_date, tr_start - timedelta(days=1))
+        cons_def_end = min(end_date, tr_start - timedelta(days=1))
+        df = fetch_records(CONS_DEF_DATASET, start_date, cons_def_end)
         if not df.empty:
             _upsert_all(con, df)
 
