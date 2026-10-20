@@ -103,8 +103,8 @@ No separate raw/bronze layer: unlike project 1, there is no ML feature engineeri
 here, so the DuckDB warehouse is written to directly from each source connector.
 
 ```bash
-uv run warehouse backfill --start 2024-02-01   # éCO2mix + ENTSO-E, idempotent
-uv run warehouse refresh                        # incremental, from each table's last datetime
+uv run warehouse backfill   # éCO2mix + ENTSO-E, idempotent
+uv run warehouse refresh    # incremental, from each table's last datetime
 ```
 
 Idempotence: upsert (delete then insert over the affected date range) per table — the
@@ -134,8 +134,8 @@ relevant for scoring tool-use correctness in Phase 3.
 
 **`run_sql_query` safeguards** (the only point that executes agent-written code):
 - DuckDB connection opened `read_only=True` — blocks any write at the engine level.
-- Pre-execution validation: exactly one statement, must start with `SELECT` (reject
-  multi-statement input or write keywords). Defense in depth, not a full SQL sandbox —
+- Pre-execution validation: exactly one statement, must start with `SELECT` or `WITH`
+  (reject multi-statement input or write keywords). Defense in depth, not a full SQL sandbox —
   the real risk is near zero here (local DuckDB, read-only, no sensitive data).
 - No timeout handling needed: all three tables hold at most a few hundred thousand
   hourly rows (~2 years of data), so even a malformed query costs milliseconds, not a

@@ -44,6 +44,7 @@ def get_connection(
 
 
 def create_schema(con: duckdb.DuckDBPyConnection) -> None:
+    """Create the warehouse tables if they don't already exist."""
     for statement in _SCHEMA_STATEMENTS:
         con.execute(statement)
 
