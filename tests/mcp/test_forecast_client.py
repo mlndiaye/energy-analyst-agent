@@ -28,6 +28,21 @@ def test_fetch_latest_forecast_wraps_connection_errors() -> None:
     assert raised
 
 
+def test_fetch_latest_forecast_wraps_http_errors() -> None:
+    import requests
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = requests.HTTPError("404 Client Error: Not Found")
+
+    with patch("eaa.mcp.forecast_client.requests.get", return_value=mock_response):
+        try:
+            forecast_client.fetch_latest_forecast("http://localhost:8000")
+            raised = False
+        except forecast_client.ForecastAPIError:
+            raised = True
+    assert raised
+
+
 def test_fetch_forecast_history_passes_date_params() -> None:
     from datetime import date
 

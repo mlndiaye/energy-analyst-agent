@@ -17,7 +17,7 @@ def fetch_latest_forecast(base_url: str) -> list[dict]:
         response = requests.get(f"{base_url}/forecast/latest", timeout=10)
         response.raise_for_status()
     except requests.RequestException as exc:
-        raise ForecastAPIError(f"forecast API unreachable: {exc}") from exc
+        raise ForecastAPIError(f"forecast API error: {exc}") from exc
     return response.json()
 
 
@@ -34,5 +34,5 @@ def fetch_forecast_history(
         response = requests.get(f"{base_url}/forecast/history", params=params, timeout=10)
         response.raise_for_status()
     except requests.RequestException as exc:
-        raise ForecastAPIError(f"forecast API unreachable: {exc}") from exc
+        raise ForecastAPIError(f"forecast API error: {exc}") from exc
     return response.json()
