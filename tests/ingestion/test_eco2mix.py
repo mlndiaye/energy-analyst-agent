@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 import pandas as pd
@@ -217,3 +217,49 @@ def test_backfill_bounds_cons_def_fetch_by_end_date_when_entirely_before_tr_wind
         date(2024, 1, 1),
         date(2024, 6, 1),
     )
+
+
+def test_backfill_raises_value_error_when_start_after_end() -> None:
+    con = warehouse.get_connection(":memory:")
+    with (
+        patch("eaa.ingestion.eco2mix.fetch_records") as mock_fetch,
+        pytest.raises(ValueError, match="must not be after"),
+    ):
+        eco2mix.backfill(con, date(2026, 6, 1), date(2026, 1, 1))
+    con.close()
+    mock_fetch.assert_not_called()
+
+
+def test_refresh_fetches_tr_window_and_upserts(tmp_path) -> None:
+    con = warehouse.get_connection(tmp_path / "test.duckdb")
+    today = date(2026, 6, 1)
+
+    raw = pd.DataFrame(
+        {
+            "date_heure": ["2026-05-30T00:00:00+00:00"],
+            "consommation": ["1000"],
+            "nucleaire": ["40000"],
+            "eolien": ["3000"],
+            "solaire": ["0"],
+            "hydraulique": ["5000"],
+            "gaz": ["2000"],
+        }
+    )
+
+    with (
+        patch("eaa.ingestion.eco2mix.fetch_records", return_value=raw) as mock_fetch,
+        patch("eaa.ingestion.eco2mix._today", return_value=today),
+    ):
+        eco2mix.refresh(con)
+
+    mock_fetch.assert_called_once_with(
+        eco2mix.TR_DATASET,
+        today - timedelta(days=eco2mix.REFRESH_WINDOW_DAYS),
+        today,
+    )
+
+    consumption_rows = con.execute("SELECT COUNT(*) FROM consumption_hourly").fetchone()[0]
+    mix_rows = con.execute("SELECT COUNT(*) FROM production_by_source_hourly").fetchone()[0]
+    con.close()
+    assert consumption_rows > 0
+    assert mix_rows > 0

@@ -35,6 +35,11 @@ PAGE_SIZE = 100
 # manually-updated boundary date as time passes.
 TR_WINDOW_DAYS = 90
 
+# éCO2mix tr data gets revised for a few days after initial publication (RTE
+# corrects provisional values), so refresh() re-pulls this trailing window to
+# pick up those corrections rather than only the latest day.
+REFRESH_WINDOW_DAYS = 5
+
 
 def fetch_records(dataset: str, start_date: date, end_date: date) -> pd.DataFrame:
     """Fetch every record of `dataset` with date_heure in [start_date, end_date], inclusive.
@@ -138,9 +143,15 @@ def backfill(con, start_date: date, end_date: date) -> None:
     """Fetch and upsert [start_date, end_date], chaining cons-def (older data)
     and tr (data within TR_WINDOW_DAYS of today).
     """
+    if start_date > end_date:
+        raise ValueError(f"start_date ({start_date}) must not be after end_date ({end_date})")
+
     tr_start = max(start_date, _today() - timedelta(days=TR_WINDOW_DAYS))
 
     if start_date < tr_start:
+        # Never fetch cons-def past what the caller asked for, even when
+        # end_date is entirely before the tr window (otherwise this would
+        # overshoot end_date out to tr_start - 1, well beyond the request).
         cons_def_end = min(end_date, tr_start - timedelta(days=1))
         df = fetch_records(CONS_DEF_DATASET, start_date, cons_def_end)
         if not df.empty:
@@ -153,8 +164,8 @@ def backfill(con, start_date: date, end_date: date) -> None:
 
 
 def refresh(con) -> None:
-    """Re-fetch the last 5 days through today from the tr dataset."""
+    """Re-fetch the last REFRESH_WINDOW_DAYS days through today from the tr dataset."""
     today = _today()
-    df = fetch_records(TR_DATASET, today - timedelta(days=5), today)
+    df = fetch_records(TR_DATASET, today - timedelta(days=REFRESH_WINDOW_DAYS), today)
     if not df.empty:
         _upsert_all(con, df)
