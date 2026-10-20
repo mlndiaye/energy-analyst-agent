@@ -29,6 +29,10 @@ def run_sql_query_impl(con: duckdb.DuckDBPyConnection, query: str) -> list[dict]
     normalized = query.strip().rstrip(";")
     if ";" in normalized:
         raise ValueError("Only a single SQL statement is allowed")
+    # Note: a WITH clause can terminate in DELETE/INSERT/UPDATE in DuckDB's
+    # grammar, not just SELECT -- rejecting that is intentionally left to the
+    # read-only connection the MCP server always opens this with (see design
+    # spec), not to this string check.
     if not normalized.upper().startswith(("SELECT", "WITH")):
         raise ValueError("Only SELECT (or WITH ... SELECT) queries are allowed")
 

@@ -1,3 +1,4 @@
+import duckdb
 import pandas as pd
 import pytest
 
@@ -56,6 +57,19 @@ def test_run_sql_query_works_against_read_only_connection(tmp_path) -> None:
     read_con.close()
 
     assert rows == [{"consumption_mw": 42.0}]
+
+
+def test_run_sql_query_cte_write_blocked_by_readonly_connection(tmp_path) -> None:
+    db_path = tmp_path / "test.duckdb"
+    write_con = warehouse.get_connection(db_path)
+    df = pd.DataFrame({"datetime": pd.to_datetime(["2026-01-01 00:00"]), "consumption_mw": [42.0]})
+    warehouse.upsert_consumption(write_con, df)
+    write_con.close()
+
+    read_con = warehouse.get_connection(db_path, read_only=True)
+    with pytest.raises(duckdb.Error):
+        tools.run_sql_query_impl(read_con, "WITH t AS (SELECT 1) DELETE FROM consumption_hourly")
+    read_con.close()
 
 
 def test_run_sql_query_returns_rows_as_dicts(con) -> None:
