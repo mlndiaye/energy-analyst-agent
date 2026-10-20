@@ -144,3 +144,20 @@ def test_get_forecast_history_impl_returns_data_on_success() -> None:
         )
 
     assert result == [{"date_heure": "2026-01-01T00:00:00"}]
+
+
+def test_get_forecast_history_impl_returns_error_dict_on_failure() -> None:
+    with patch(
+        "eaa.mcp.tools.fetch_forecast_history",
+        side_effect=ForecastAPIError("forecast API error: down"),
+    ):
+        result = tools.get_forecast_history_impl(
+            "http://localhost:8000", "2026-01-01", "2026-01-02"
+        )
+
+    assert result == {"error": "forecast API error: down"}
+
+
+def test_get_forecast_history_impl_rejects_invalid_end_date() -> None:
+    result = tools.get_forecast_history_impl("http://localhost:8000", "2026-01-01", "not-a-date")
+    assert "error" in result
