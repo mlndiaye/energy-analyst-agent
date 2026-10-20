@@ -49,7 +49,8 @@ def create_schema(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def upsert_consumption(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None:
-    con.register("_df_consumption", df[["datetime", "consumption_mw"]])
+    df = df[["datetime", "consumption_mw"]].drop_duplicates(subset=["datetime"], keep="last")
+    con.register("_df_consumption", df)
     con.execute(
         """
         INSERT INTO consumption_hourly
@@ -61,7 +62,10 @@ def upsert_consumption(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None
 
 
 def upsert_production_mix(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None:
-    con.register("_df_production", df[["datetime", "source", "production_mw"]])
+    df = df[["datetime", "source", "production_mw"]].drop_duplicates(
+        subset=["datetime", "source"], keep="last"
+    )
+    con.register("_df_production", df)
     con.execute(
         """
         INSERT INTO production_by_source_hourly
@@ -73,7 +77,8 @@ def upsert_production_mix(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> N
 
 
 def upsert_prices(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None:
-    con.register("_df_prices", df[["datetime", "price_eur_mwh"]])
+    df = df[["datetime", "price_eur_mwh"]].drop_duplicates(subset=["datetime"], keep="last")
+    con.register("_df_prices", df)
     con.execute(
         """
         INSERT INTO day_ahead_prices_hourly
