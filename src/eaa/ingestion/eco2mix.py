@@ -6,10 +6,12 @@ self-contained — see the design spec's "why a new connector" section).
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pandas as pd
 import requests
+
+from eaa import warehouse
 
 RECORDS_URL = "https://odre.opendatasoft.com/api/explore/v2.1/catalog/datasets/{dataset}/records"
 
@@ -121,3 +123,37 @@ def production_mix_hourly(df: pd.DataFrame) -> pd.DataFrame:
     # wrongly mean "this timestamp doesn't exist", breaking joins/counts
     # across the warehouse's hourly tables.
     return long_df[["datetime", "source", "production_mw"]]
+
+
+def _today() -> date:
+    return datetime.now(UTC).date()
+
+
+def _upsert_all(con, raw_df: pd.DataFrame) -> None:
+    warehouse.upsert_consumption(con, consumption_hourly(raw_df))
+    warehouse.upsert_production_mix(con, production_mix_hourly(raw_df))
+
+
+def backfill(con, start_date: date, end_date: date) -> None:
+    """Fetch and upsert [start_date, end_date], chaining cons-def (older data)
+    and tr (data within TR_WINDOW_DAYS of today).
+    """
+    tr_start = max(start_date, _today() - timedelta(days=TR_WINDOW_DAYS))
+
+    if start_date < tr_start:
+        df = fetch_records(CONS_DEF_DATASET, start_date, tr_start - timedelta(days=1))
+        if not df.empty:
+            _upsert_all(con, df)
+
+    if end_date >= tr_start:
+        df = fetch_records(TR_DATASET, max(start_date, tr_start), end_date)
+        if not df.empty:
+            _upsert_all(con, df)
+
+
+def refresh(con) -> None:
+    """Re-fetch the last 5 days through today from the tr dataset."""
+    today = _today()
+    df = fetch_records(TR_DATASET, today - timedelta(days=5), today)
+    if not df.empty:
+        _upsert_all(con, df)

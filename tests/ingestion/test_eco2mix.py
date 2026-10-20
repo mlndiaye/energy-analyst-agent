@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
+from eaa import warehouse
 from eaa.ingestion import eco2mix
 
 
@@ -158,3 +159,36 @@ def test_fetch_records_raises_runtime_error_on_missing_results_key() -> None:
         mock_get.return_value = _bad_page({"error": "rate limited"})
         with pytest.raises(RuntimeError, match=eco2mix.TR_DATASET):
             eco2mix.fetch_records(eco2mix.TR_DATASET, date(2026, 1, 1), date(2026, 1, 1))
+
+
+def test_backfill_chains_cons_def_and_tr_and_upserts(tmp_path) -> None:
+    con = warehouse.get_connection(tmp_path / "test.duckdb")
+    today = date(2026, 6, 1)
+
+    raw = pd.DataFrame(
+        {
+            "date_heure": ["2026-01-01T00:00:00+00:00"],
+            "consommation": ["1000"],
+            "nucleaire": ["40000"],
+            "eolien": ["3000"],
+            "solaire": ["0"],
+            "hydraulique": ["5000"],
+            "gaz": ["2000"],
+        }
+    )
+
+    with (
+        patch("eaa.ingestion.eco2mix.fetch_records", return_value=raw) as mock_fetch,
+        patch("eaa.ingestion.eco2mix._today", return_value=today),
+    ):
+        eco2mix.backfill(con, date(2024, 2, 1), today)
+
+    datasets_fetched = [call.args[0] for call in mock_fetch.call_args_list]
+    assert eco2mix.CONS_DEF_DATASET in datasets_fetched
+    assert eco2mix.TR_DATASET in datasets_fetched
+
+    consumption_rows = con.execute("SELECT COUNT(*) FROM consumption_hourly").fetchone()[0]
+    mix_rows = con.execute("SELECT COUNT(*) FROM production_by_source_hourly").fetchone()[0]
+    con.close()
+    assert consumption_rows > 0
+    assert mix_rows > 0
