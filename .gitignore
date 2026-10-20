@@ -219,3 +219,9 @@ __marimo__/
 
 # Local git worktrees (superpowers:using-git-worktrees)
 .worktrees/
+
+CLAUDE.md
+
+# DuckDB warehouse (rebuilt from source APIs via `warehouse backfill`)
+*.duckdb
+*.duckdb.wal
