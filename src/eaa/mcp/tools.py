@@ -5,7 +5,11 @@ don't need a running MCP server or client; server.py wraps these in thin
 
 from __future__ import annotations
 
+from datetime import date
+
 import duckdb
+
+from eaa.mcp.forecast_client import ForecastAPIError, fetch_forecast_history, fetch_latest_forecast
 
 MAX_ROWS = 500
 
@@ -47,3 +51,25 @@ def run_sql_query_impl(con: duckdb.DuckDBPyConnection, query: str) -> list[dict]
             {"_notice": f"Result truncated at {MAX_ROWS} rows -- aggregate instead of listing."}
         )
     return records
+
+
+def get_latest_forecast_impl(base_url: str) -> list[dict] | dict:
+    try:
+        return fetch_latest_forecast(base_url)
+    except ForecastAPIError as exc:
+        return {"error": str(exc)}
+
+
+def get_forecast_history_impl(
+    base_url: str, start: str | None, end: str | None
+) -> list[dict] | dict:
+    try:
+        start_date = date.fromisoformat(start) if start else None
+        end_date = date.fromisoformat(end) if end else None
+    except ValueError as exc:
+        return {"error": f"invalid date: {exc}"}
+
+    try:
+        return fetch_forecast_history(base_url, start_date, end_date)
+    except ForecastAPIError as exc:
+        return {"error": str(exc)}

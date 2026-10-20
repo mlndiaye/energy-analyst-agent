@@ -1,9 +1,12 @@
+from unittest.mock import patch
+
 import duckdb
 import pandas as pd
 import pytest
 
 from eaa import warehouse
 from eaa.mcp import tools
+from eaa.mcp.forecast_client import ForecastAPIError
 
 
 @pytest.fixture
@@ -105,3 +108,39 @@ def test_get_schema_reports_no_data_when_empty(con) -> None:
     description = tools.get_schema_impl(con)
 
     assert "(no data ingested yet)" in description
+
+
+def test_get_latest_forecast_impl_returns_data_on_success() -> None:
+    with patch(
+        "eaa.mcp.tools.fetch_latest_forecast",
+        return_value=[{"date_heure": "2026-01-02T00:00:00", "q50_pred": 55000.0}],
+    ):
+        result = tools.get_latest_forecast_impl("http://localhost:8000")
+
+    assert result == [{"date_heure": "2026-01-02T00:00:00", "q50_pred": 55000.0}]
+
+
+def test_get_latest_forecast_impl_returns_error_dict_on_failure() -> None:
+    with patch(
+        "eaa.mcp.tools.fetch_latest_forecast",
+        side_effect=ForecastAPIError("forecast API unreachable: down"),
+    ):
+        result = tools.get_latest_forecast_impl("http://localhost:8000")
+
+    assert result == {"error": "forecast API unreachable: down"}
+
+
+def test_get_forecast_history_impl_rejects_invalid_date() -> None:
+    result = tools.get_forecast_history_impl("http://localhost:8000", "not-a-date", None)
+    assert "error" in result
+
+
+def test_get_forecast_history_impl_returns_data_on_success() -> None:
+    with patch(
+        "eaa.mcp.tools.fetch_forecast_history", return_value=[{"date_heure": "2026-01-01T00:00:00"}]
+    ):
+        result = tools.get_forecast_history_impl(
+            "http://localhost:8000", "2026-01-01", "2026-01-02"
+        )
+
+    assert result == [{"date_heure": "2026-01-01T00:00:00"}]
