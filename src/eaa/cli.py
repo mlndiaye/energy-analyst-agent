@@ -17,6 +17,7 @@ REQUIRED_ENV_VARS = ["ENTSOE_API_TOKEN"]
 
 
 def _check_required_env_vars() -> None:
+    """Exit with a clear message if any required environment variable is unset."""
     missing = [name for name in REQUIRED_ENV_VARS if not os.environ.get(name)]
     if missing:
         raise SystemExit(
@@ -26,6 +27,7 @@ def _check_required_env_vars() -> None:
 
 
 def backfill() -> None:
+    """Backfill both connectors from STUDY_WINDOW_START through today."""
     today = datetime.now(UTC).date()
     con = warehouse.get_connection()
     try:
@@ -36,6 +38,7 @@ def backfill() -> None:
 
 
 def refresh() -> None:
+    """Refresh both connectors' trailing windows to pick up recent revisions."""
     con = warehouse.get_connection()
     try:
         eco2mix.refresh(con)
@@ -45,6 +48,7 @@ def refresh() -> None:
 
 
 def main() -> None:
+    """Load env vars, check required ones, and dispatch to the requested subcommand."""
     load_dotenv()
     _check_required_env_vars()
     parser = argparse.ArgumentParser(prog="warehouse")
