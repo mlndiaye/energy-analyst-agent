@@ -61,7 +61,7 @@ def test_fetch_records_raises_on_no_progress_at_full_page() -> None:
         mock_get.return_value = _page(same_timestamp_rows)
         with (
             patch("eaa.ingestion.eco2mix.PAGE_SIZE", 2),
-            pytest.raises(RuntimeError, match="no progress"),
+            pytest.raises(eco2mix.Eco2mixError, match="no progress"),
         ):
             eco2mix.fetch_records(eco2mix.TR_DATASET, date(2026, 1, 1), date(2026, 1, 1))
 
@@ -157,7 +157,7 @@ def test_production_mix_hourly_keeps_nan_row_for_a_gap_hour() -> None:
 def test_fetch_records_raises_runtime_error_on_missing_results_key() -> None:
     with patch("eaa.ingestion.eco2mix.requests.get") as mock_get:
         mock_get.return_value = _bad_page({"error": "rate limited"})
-        with pytest.raises(RuntimeError, match=eco2mix.TR_DATASET):
+        with pytest.raises(eco2mix.Eco2mixError, match=eco2mix.TR_DATASET):
             eco2mix.fetch_records(eco2mix.TR_DATASET, date(2026, 1, 1), date(2026, 1, 1))
 
 

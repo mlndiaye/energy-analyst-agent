@@ -29,6 +29,11 @@ SOURCE_FIELDS = {
 FIELDS = ["date_heure", "consommation", *SOURCE_FIELDS]
 PAGE_SIZE = 100
 
+
+class Eco2mixError(RuntimeError):
+    """Raised when the éCO2mix API returns an error or an unparseable response."""
+
+
 # eco2mix-national-tr only keeps a rolling window (~3 months, per the ODRÉ
 # dataset description); anything older must come from cons-def instead. Computed
 # relative to "today" rather than hardcoded, so this connector doesn't need a
@@ -69,7 +74,7 @@ def fetch_records(dataset: str, start_date: date, end_date: date) -> pd.DataFram
         response.raise_for_status()
         body = response.json()
         if "results" not in body:
-            raise RuntimeError(
+            raise Eco2mixError(
                 f"éCO2mix response for dataset={dataset!r} cursor={cursor!r} missing "
                 f"'results' key (HTTP {response.status_code}): {body!r}"
             )
@@ -84,7 +89,7 @@ def fetch_records(dataset: str, start_date: date, end_date: date) -> pd.DataFram
                 seen.add(r["date_heure"])
 
         if not new_rows and len(page) == PAGE_SIZE:
-            raise RuntimeError(
+            raise Eco2mixError(
                 f"éCO2mix pagination made no progress at cursor {cursor!r} -- more "
                 f"than {PAGE_SIZE} records appear to share one date_heure."
             )
