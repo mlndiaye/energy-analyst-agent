@@ -2,6 +2,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from eaa import warehouse
 from eaa.ingestion import entsoe
 
@@ -24,12 +26,8 @@ def test_parse_day_ahead_prices_raises_on_empty_response() -> None:
         '<Publication_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3">'
         "</Publication_MarketDocument>"
     )
-    try:
+    with pytest.raises(entsoe.EntsoeError):
         entsoe.parse_day_ahead_prices(empty)
-        raised = False
-    except entsoe.EntsoeError:
-        raised = True
-    assert raised
 
 
 def test_parse_day_ahead_prices_wraps_malformed_point_error() -> None:
@@ -43,14 +41,8 @@ def test_parse_day_ahead_prices_wraps_malformed_point_error() -> None:
         "</Period></TimeSeries>"
         "</Publication_MarketDocument>"
     )
-    try:
+    with pytest.raises(entsoe.EntsoeError):
         entsoe.parse_day_ahead_prices(malformed)
-        raised = False
-    except entsoe.EntsoeError:
-        raised = True
-    except (TypeError, ValueError):
-        raised = False
-    assert raised
 
 
 def test_fetch_day_ahead_prices_calls_api_with_expected_params() -> None:
