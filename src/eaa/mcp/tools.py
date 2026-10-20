@@ -9,6 +9,7 @@ import duckdb
 
 MAX_ROWS = 500
 
+# Keep this in sync with warehouse._SCHEMA_STATEMENTS if the schema ever changes.
 _SCHEMA_DESCRIPTION = """
 consumption_hourly(datetime TIMESTAMP, consumption_mw DOUBLE)
 production_by_source_hourly(datetime TIMESTAMP, source VARCHAR, production_mw DOUBLE)
@@ -28,8 +29,8 @@ def run_sql_query_impl(con: duckdb.DuckDBPyConnection, query: str) -> list[dict]
     normalized = query.strip().rstrip(";")
     if ";" in normalized:
         raise ValueError("Only a single SQL statement is allowed")
-    if not normalized.upper().startswith("SELECT"):
-        raise ValueError("Only SELECT queries are allowed")
+    if not normalized.upper().startswith(("SELECT", "WITH")):
+        raise ValueError("Only SELECT (or WITH ... SELECT) queries are allowed")
 
     result = con.execute(normalized)
     columns = [d[0] for d in result.description]
