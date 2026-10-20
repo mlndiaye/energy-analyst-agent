@@ -49,6 +49,9 @@ def create_schema(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def upsert_consumption(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None:
+    """Upsert hourly consumption. `df['datetime']` must be a single consistent
+    pd.Timestamp dtype (not mixed tz-aware/naive or strings) — deduplication on
+    intra-batch duplicate keys relies on dtype equality to detect them."""
     df = df[["datetime", "consumption_mw"]].drop_duplicates(subset=["datetime"], keep="last")
     con.register("_df_consumption", df)
     con.execute(
@@ -62,6 +65,10 @@ def upsert_consumption(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None
 
 
 def upsert_production_mix(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None:
+    """Upsert hourly production by source. `df['datetime']` must be a single
+    consistent pd.Timestamp dtype (not mixed tz-aware/naive or strings) —
+    deduplication on intra-batch duplicate (datetime, source) keys relies on
+    dtype equality to detect them."""
     df = df[["datetime", "source", "production_mw"]].drop_duplicates(
         subset=["datetime", "source"], keep="last"
     )
@@ -77,6 +84,9 @@ def upsert_production_mix(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> N
 
 
 def upsert_prices(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None:
+    """Upsert hourly day-ahead prices. `df['datetime']` must be a single consistent
+    pd.Timestamp dtype (not mixed tz-aware/naive or strings) — deduplication on
+    intra-batch duplicate keys relies on dtype equality to detect them."""
     df = df[["datetime", "price_eur_mwh"]].drop_duplicates(subset=["datetime"], keep="last")
     con.register("_df_prices", df)
     con.execute(
