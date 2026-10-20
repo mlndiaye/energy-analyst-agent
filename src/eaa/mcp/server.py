@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 
+import duckdb
 from dotenv import load_dotenv
 
 # mcp SDK v2.0+ renamed FastMCP to MCPServer -- see
@@ -27,9 +28,12 @@ mcp = MCPServer("energy-analyst-agent-warehouse")
 
 
 @mcp.tool()
-def get_schema() -> str:
+def get_schema() -> str | dict:
     """Describe the warehouse tables, columns, and available production sources."""
-    con = warehouse.get_connection(read_only=True)
+    try:
+        con = warehouse.get_connection(read_only=True)
+    except duckdb.Error as exc:
+        return {"error": f"warehouse unavailable: {exc}"}
     try:
         return get_schema_impl(con)
     finally:
@@ -37,9 +41,12 @@ def get_schema() -> str:
 
 
 @mcp.tool()
-def run_sql_query(query: str) -> list[dict]:
+def run_sql_query(query: str) -> list[dict] | dict:
     """Run a read-only SELECT query against the warehouse and return the rows."""
-    con = warehouse.get_connection(read_only=True)
+    try:
+        con = warehouse.get_connection(read_only=True)
+    except duckdb.Error as exc:
+        return {"error": f"warehouse unavailable: {exc}"}
     try:
         return run_sql_query_impl(con, query)
     finally:
