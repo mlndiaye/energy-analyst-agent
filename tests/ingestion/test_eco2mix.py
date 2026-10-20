@@ -1,6 +1,9 @@
 from datetime import date
 from unittest.mock import patch
 
+import pandas as pd
+import pytest
+
 from eaa.ingestion import eco2mix
 
 
@@ -31,3 +34,58 @@ def test_fetch_records_paginates_and_dedups_on_cursor() -> None:
     assert len(df) == 3
     assert mock_get.call_count == 2
     assert list(df["date_heure"]) == [row["date_heure"] for row in page1]
+
+
+def test_fetch_records_raises_on_no_progress_at_full_page() -> None:
+    same_timestamp_rows = [{"date_heure": "2026-01-01T00:00:00+00:00", "consommation": "1000"}] * 2
+
+    with patch("eaa.ingestion.eco2mix.requests.get") as mock_get:
+        mock_get.return_value = _page(same_timestamp_rows)
+        with (
+            patch("eaa.ingestion.eco2mix.PAGE_SIZE", 2),
+            pytest.raises(RuntimeError, match="no progress"),
+        ):
+            eco2mix.fetch_records(eco2mix.TR_DATASET, date(2026, 1, 1), date(2026, 1, 1))
+
+
+def test_fetch_records_returns_empty_dataframe_with_correct_columns_for_empty_range() -> None:
+    with patch("eaa.ingestion.eco2mix.requests.get") as mock_get:
+        mock_get.return_value = _page([])
+        df = eco2mix.fetch_records(eco2mix.TR_DATASET, date(2026, 1, 1), date(2026, 1, 1))
+
+    assert df.empty
+    assert list(df.columns) == eco2mix.FIELDS
+
+
+def test_consumption_hourly_aggregates_subhourly_points_by_mean() -> None:
+    raw = pd.DataFrame(
+        {
+            "date_heure": [
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:15:00+00:00",
+                "2026-01-01T00:30:00+00:00",
+                "2026-01-01T00:45:00+00:00",
+            ],
+            "consommation": ["100", "110", "120", "130"],
+        }
+    )
+    result = eco2mix.consumption_hourly(raw)
+    assert len(result) == 1
+    assert result.loc[0, "consumption_mw"] == 115.0
+
+
+def test_production_mix_hourly_melts_to_long_format_with_english_names() -> None:
+    raw = pd.DataFrame(
+        {
+            "date_heure": ["2026-01-01T00:00:00+00:00", "2026-01-01T00:30:00+00:00"],
+            "nucleaire": ["40000", "42000"],
+            "eolien": ["3000", "3200"],
+            "solaire": ["0", "0"],
+            "hydraulique": ["5000", "5100"],
+            "gaz": ["2000", "2100"],
+        }
+    )
+    result = eco2mix.production_mix_hourly(raw)
+    assert set(result["source"]) == {"nuclear", "wind", "solar", "hydro", "gas"}
+    nuclear_row = result[result["source"] == "nuclear"].iloc[0]
+    assert nuclear_row["production_mw"] == 41000.0

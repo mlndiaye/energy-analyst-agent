@@ -82,3 +82,32 @@ def fetch_records(dataset: str, start_date: date, end_date: date) -> pd.DataFram
         cursor = page[-1]["date_heure"]
 
     return pd.DataFrame(rows, columns=FIELDS)
+
+
+def _to_hourly(df: pd.DataFrame, value_cols: list[str]) -> pd.DataFrame:
+    working = df.copy()
+    working["datetime"] = pd.to_datetime(working["date_heure"], utc=True).dt.tz_localize(None)
+    for col in value_cols:
+        working[col] = pd.to_numeric(working[col], errors="coerce")
+    hourly = working.set_index("datetime")[value_cols].resample("1h").mean()
+    return hourly.reset_index()
+
+
+def consumption_hourly(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate raw (sub-hourly) éCO2mix consumption rows to hourly means."""
+    hourly = _to_hourly(df, ["consommation"])
+    return hourly.rename(columns={"consommation": "consumption_mw"})
+
+
+def production_mix_hourly(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate raw (sub-hourly) éCO2mix production-by-source rows to hourly
+    means, reshaped from wide (one column per French source) to long format
+    with English source names.
+    """
+    source_cols = list(SOURCE_FIELDS)
+    hourly = _to_hourly(df, source_cols)
+    long_df = hourly.melt(
+        id_vars="datetime", value_vars=source_cols, var_name="source_fr", value_name="production_mw"
+    )
+    long_df["source"] = long_df["source_fr"].map(SOURCE_FIELDS)
+    return long_df[["datetime", "source", "production_mw"]].dropna(subset=["production_mw"])
