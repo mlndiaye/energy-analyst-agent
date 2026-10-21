@@ -54,16 +54,31 @@ comparison, where Claude is the "API-based" reference model. Uses LangChain's
 directly, so Phase 3 can point the same `build_agent()` code at an Ollama model via
 config alone, not a code change. New env var: `ANTHROPIC_API_KEY`.
 
-### MCP client: `langchain-mcp-adapters`
+### MCP client: a thin adapter over the official `mcp` SDK
 
-`langchain_mcp_adapters.client.MultiServerMCPClient` connects to the MCP server
-(`MCP_SERVER_URL`) and exposes its 4 tools as LangChain tools automatically — the
-standard LangGraph↔MCP integration, avoiding a hand-rolled JSON-schema-to-tool
-conversion. `src/eaa/agent/mcp_client.py` wraps the connection setup. The connection is
-established once at process startup (FastAPI or CLI), not per-request; if the MCP
-server is unreachable at startup, the process fails immediately with a clear message
-(not a half-initialized agent that fails confusingly on the first real request) —
-matching Phase 1's `_check_required_env_vars()` fail-fast pattern.
+**Revised during implementation** (Task 3): the originally planned `langchain-mcp-adapters`
+turned out to be unmaintained (its own repo announced migration to `langchain.mcp` in
+September 2026) and incompatible with `mcp>=2.0` (the version this project depends on
+since `MCPServer` replaced `FastMCP` — see the MCP server section above). Upgrading to
+the one compatible release requires `mcp<2.0`, which would break the already-built
+server. The alternative — `langchain.mcp` + `fastmcp` — was rejected: it pulls in a
+second, unvetted MCP framework (`fastmcp`) alongside the official `mcp` SDK already
+used everywhere else in this project, for no benefit over writing the small amount of
+adapter code directly.
+
+Decision: `src/eaa/agent/mcp_client.py` connects to the MCP server using the official
+`mcp` SDK's own streamable-http client (`mcp.client.streamable_http` + `ClientSession`
+— already proven working against this exact server in Phase 1's Task 13 manual
+verification) and converts each MCP tool definition into a LangChain `StructuredTool`
+by hand: tool name and description pass through directly, the MCP tool's JSON schema
+becomes the `StructuredTool`'s args schema, and the tool's async function calls
+`ClientSession.call_tool(name, args)` and returns its result. No new dependency
+required — `langchain_core` (already pulled in by `langchain`) provides `StructuredTool`.
+
+The connection is established once at process startup (FastAPI or CLI), not per-request;
+if the MCP server is unreachable at startup, the process fails immediately with a clear
+message (not a half-initialized agent that fails confusingly on the first real request)
+— matching Phase 1's `_check_required_env_vars()` fail-fast pattern.
 
 ### Memory: LangGraph's `SqliteSaver` checkpointer
 
@@ -117,8 +132,11 @@ running MCP server) closes out the implementation, mirroring Phase 1's Task 13.
 - **One-shot CLI (single question per command)**: rejected in favor of a REPL, since a
   one-shot CLI would need an explicit `--session-id` flag to benefit from multi-turn
   memory at all, adding friction for the interactive use case memory was chosen for.
-- **Hand-rolled MCP client**: rejected — `langchain-mcp-adapters` is the maintained,
-  standard integration; reimplementing it isn't justified.
+- **`langchain-mcp-adapters`**: originally planned, reverted during implementation —
+  unmaintained and incompatible with `mcp>=2.0` (see MCP client section above).
+- **`langchain.mcp` + `fastmcp`**: rejected — adds a second, unvetted MCP framework
+  alongside the official `mcp` SDK already used throughout this project, for no benefit
+  over the small amount of hand-written adapter code the chosen approach requires.
 
 ## Consequences
 
