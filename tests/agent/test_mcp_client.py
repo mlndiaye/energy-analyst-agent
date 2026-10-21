@@ -28,6 +28,18 @@ async def test_get_mcp_tools_converts_mcp_tools_to_structured_tools() -> None:
     assert tools[0].description == "Describe the warehouse."
 
 
+@pytest.mark.asyncio
+async def test_tool_call_returns_clean_error_string_when_mcp_server_is_unreachable() -> None:
+    with patch("eaa.agent.mcp_client._open_session") as mock_open_session:
+        mock_open_session.return_value.__aenter__.side_effect = ConnectionError("down")
+
+        call = mcp_client._make_tool_caller("http://127.0.0.1:8001/mcp", "get_schema")
+        result = await call()
+
+    assert isinstance(result, str)
+    assert "MCP tool call failed" in result
+
+
 def test_load_mcp_tools_runs_the_async_version_synchronously() -> None:
     with patch("eaa.agent.mcp_client.get_mcp_tools") as mock_get:
 

@@ -30,9 +30,17 @@ def _make_tool_caller(url: str, name: str):
     # scope (tool calls are occasional, not a tight loop) -- don't "optimize"
     # this into a shared long-lived session unless a real need appears.
     async def _call(**kwargs) -> str:
-        async with _open_session(url) as session:
-            result = await session.call_tool(name, kwargs)
-            return "".join(block.text for block in result.content if hasattr(block, "text"))
+        # LangGraph's default ToolNode only catches ValidationError/ToolException --
+        # any other exception aborts the whole agent turn. A dead or unreachable MCP
+        # server must not crash the graph; it should read like a failed tool result
+        # the agent can react to, mirroring Phase 1's duckdb.Error -> {"error": ...}
+        # clean-failure pattern at the next layer down.
+        try:
+            async with _open_session(url) as session:
+                result = await session.call_tool(name, kwargs)
+                return "".join(block.text for block in result.content if hasattr(block, "text"))
+        except Exception as exc:  # noqa: BLE001 -- intentional catch-all boundary, see comment above
+            return f"MCP tool call failed: {exc}"
 
     return _call
 
