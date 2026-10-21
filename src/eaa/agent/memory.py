@@ -17,6 +17,7 @@ def get_checkpointer(db_path: Path = DEFAULT_MEMORY_PATH) -> SqliteSaver:
     the lifetime of the process -- it is meant to be created once at startup
     and passed as `build_agent`'s `checkpointer`.
     """
+    # Safe: SqliteSaver serializes access internally via a lock.
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     checkpointer = SqliteSaver(conn)
     checkpointer.setup()
