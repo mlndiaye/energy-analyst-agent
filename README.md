@@ -10,7 +10,7 @@ phase) and [`docs/decisions/`](docs/decisions/) for ADRs.
 source, day-ahead spot prices — RTE éCO2mix + ENTSO-E) and an MCP server exposing
 it, plus project 1's forecasting API (`france-electricity-forecasting`), as four
 tools (`get_schema`, `run_sql_query`, `get_latest_forecast`, `get_forecast_history`).
-All code is built and tested (47 tests); the éCO2mix connector is verified against
+All code is built and tested (49 tests); the éCO2mix connector is verified against
 the real API, but the ENTSO-E day-ahead price connector is still pending real-API
 verification (requires an API token requested by email — see
 [ADR 0001](docs/decisions/0001-entsoe-day-ahead-prices.md)).
