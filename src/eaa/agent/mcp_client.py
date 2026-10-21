@@ -38,6 +38,15 @@ def _make_tool_caller(url: str, name: str):
         try:
             async with _open_session(url) as session:
                 result = await session.call_tool(name, kwargs)
+                # For a tool returning multiple rows (e.g. run_sql_query), the real
+                # server emits one TextContent block per row -- joining those with
+                # no separator produces invalid, concatenated JSON. structured_content
+                # holds the clean, intended result shape and is preferred whenever
+                # present. It's None for a tool that returns plain text (e.g.
+                # get_schema) or for an error result, where the naive text-join is
+                # correct (there's only ever one block in those cases).
+                if result.structured_content is not None:
+                    return str(result.structured_content)
                 return "".join(block.text for block in result.content if hasattr(block, "text"))
         except Exception as exc:  # noqa: BLE001 -- intentional catch-all boundary, see comment above
             return f"MCP tool call failed: {exc}"
