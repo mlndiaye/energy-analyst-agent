@@ -56,6 +56,33 @@ async def test_tool_call_prefers_structured_content_for_multi_row_results() -> N
 
 
 @pytest.mark.asyncio
+async def test_tool_call_unwraps_fastmcp_scalar_wrapping_for_plain_string_tools() -> None:
+    # FastMCP wraps any non-dict return value (including get_schema's plain str)
+    # as {"result": <value>} in structured_content. For a plain-string tool, that
+    # wrapper should be unwrapped back to the bare string -- real newlines, no
+    # {'result': ...} dict-repr noise -- rather than str()'d as a whole dict.
+    schema_text = (
+        "consumption_hourly(datetime TIMESTAMP, consumption_mw DOUBLE)\n\nDistinct sources: wind"
+    )
+    fake_result = MagicMock()
+    fake_result.structured_content = {"result": schema_text}
+    fake_result.content = [MagicMock(text=schema_text)]
+
+    fake_session = AsyncMock()
+    fake_session.call_tool.return_value = fake_result
+
+    with patch("eaa.agent.mcp_client._open_session") as mock_open_session:
+        mock_open_session.return_value.__aenter__.return_value = fake_session
+
+        call = mcp_client._make_tool_caller("http://127.0.0.1:8001/mcp", "get_schema")
+        result = await call()
+
+    assert result == schema_text
+    assert "\\n" not in result  # real newlines, not an escaped dict-repr
+    assert not result.startswith("{'result'")  # no leftover wrapper
+
+
+@pytest.mark.asyncio
 async def test_tool_call_falls_back_to_text_join_when_structured_content_is_none() -> None:
     # e.g. get_schema's server-side implementation returns a plain str, not
     # structured data, so structured_content comes back None.

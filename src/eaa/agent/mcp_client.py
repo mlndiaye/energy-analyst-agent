@@ -42,11 +42,19 @@ def _make_tool_caller(url: str, name: str):
                 # server emits one TextContent block per row -- joining those with
                 # no separator produces invalid, concatenated JSON. structured_content
                 # holds the clean, intended result shape and is preferred whenever
-                # present. It's None for a tool that returns plain text (e.g.
-                # get_schema) or for an error result, where the naive text-join is
-                # correct (there's only ever one block in those cases).
-                if result.structured_content is not None:
-                    return str(result.structured_content)
+                # present. It's None only for an error result, where the naive
+                # text-join is correct (there's only ever one block there).
+                structured = result.structured_content
+                if isinstance(structured, dict) and structured.keys() == {"result"}:
+                    # FastMCP wraps any non-dict return value (e.g. get_schema's
+                    # plain str) as {"result": <value>}. For a plain string, unwrap
+                    # it back to the bare text -- real newlines, no dict-repr
+                    # wrapper -- instead of str()'ing the whole wrapper dict.
+                    unwrapped = structured["result"]
+                    if isinstance(unwrapped, str):
+                        return unwrapped
+                if structured is not None:
+                    return str(structured)
                 return "".join(block.text for block in result.content if hasattr(block, "text"))
         except Exception as exc:  # noqa: BLE001 -- intentional catch-all boundary, see comment above
             return f"MCP tool call failed: {exc}"
