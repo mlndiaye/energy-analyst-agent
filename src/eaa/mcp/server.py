@@ -66,7 +66,8 @@ def get_forecast_history(start: str | None = None, end: str | None = None) -> li
 
 
 def main() -> None:
-    mcp.run(transport="streamable-http")
+    port = int(os.environ.get("MCP_SERVER_PORT", "8001"))
+    mcp.run(transport="streamable-http", host="127.0.0.1", port=port)
 
 
 if __name__ == "__main__":
