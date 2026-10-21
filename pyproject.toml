@@ -11,13 +11,12 @@ dependencies = [
     "langgraph",
     "langchain",
     "langchain-anthropic",
-    "langchain-mcp-adapters",
     "langgraph-checkpoint-sqlite",
     "fastapi[standard]",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "pytest-asyncio", "ruff"]
 
 [project.scripts]
 warehouse = "eaa.cli:main"
@@ -38,3 +37,4 @@ target-version = "py312"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+asyncio_mode = "auto"
