@@ -190,29 +190,60 @@ git commit -m "fix: move MCP server to port 8001 to avoid colliding with project
 
 ## Task 3: MCP client wrapper
 
+**REVISED mid-implementation:** the originally planned `langchain-mcp-adapters` was
+found to be unmaintained and incompatible with `mcp>=2.0` (confirmed by actually
+attempting it: import fails against `mcp==2.3.0`, and the one release that fixes this,
+`0.3.2`, requires `mcp<2.0`, which would break Task 2's already-committed server). The
+user decided (over the alternative of switching to `langchain.mcp` + `fastmcp`, a second
+unvetted MCP framework) to write a thin adapter directly over the official `mcp` SDK
+instead — already proven to work against this exact server in Phase 1's Task 13 manual
+verification. See `docs/superpowers/specs/2026-10-21-langgraph-agent-design.md`'s "MCP
+client" section for the full reasoning. **No new dependency is added for this** —
+`langchain_core` (already present via `langchain`) provides `StructuredTool`.
+
 **Files:**
+- Modify: `pyproject.toml` (remove the unusable `langchain-mcp-adapters` dependency)
 - Create: `src/eaa/agent/mcp_client.py`
 - Test: `tests/agent/test_mcp_client.py`
 
-- [ ] **Step 1: Verify `langchain-mcp-adapters`'s actual connection config shape**
+- [ ] **Step 1: Remove the unusable dependency**
+
+In `pyproject.toml`, delete the `"langchain-mcp-adapters"` line from `dependencies`.
+
+Run: `uv sync --extra dev`
+Expected: resolves cleanly (no more import-breaking conflict).
+
+- [ ] **Step 2: Verify the official `mcp` SDK's streamable-http client API**
 
 Run:
 ```bash
 uv run python -c "
 import inspect
-from langchain_mcp_adapters.client import MultiServerMCPClient
-print(inspect.signature(MultiServerMCPClient.__init__))
-print(inspect.signature(MultiServerMCPClient.get_tools))
+from mcp.client.streamable_http import streamablehttp_client
+from mcp import ClientSession
+print(inspect.signature(streamablehttp_client))
+print(inspect.signature(ClientSession.__init__))
+print(inspect.signature(ClientSession.list_tools))
+print(inspect.signature(ClientSession.call_tool))
 "
 ```
 
-Confirm the connections dict shape (server name → config dict with a URL and a transport key — likely `"transport": "streamable_http"` and `"url": "..."`, but confirm the exact key names and value from the real signature/docstring) and that `get_tools()` is async. Adjust Step 3's code if the shape differs.
+Confirm: `streamablehttp_client(url)` is an async context manager yielding
+`(read_stream, write_stream, ...)`; `ClientSession(read_stream, write_stream)` is itself
+an async context manager requiring `await session.initialize()` before use;
+`await session.list_tools()` returns an object with a `.tools` list, each with `.name`,
+`.description`, `.inputSchema` (a JSON schema dict); `await session.call_tool(name, args)`
+returns a result object — check what field holds the actual content (likely `.content`,
+a list of content blocks, each with a `.text` for text results — inspect
+`ClientSession.call_tool`'s return type annotation or docstring to confirm). Adjust
+Step 4's code below to match exactly what you find; this is the step that matters most
+in this task, since this adapter's correctness depends entirely on matching the real SDK.
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 3: Write the failing test**
 
 ```python
 # tests/agent/test_mcp_client.py
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -220,16 +251,26 @@ from eaa.agent import mcp_client
 
 
 @pytest.mark.asyncio
-async def test_get_mcp_tools_returns_tools_from_the_server() -> None:
-    fake_tools = ["tool_a", "tool_b"]
+async def test_get_mcp_tools_converts_mcp_tools_to_structured_tools() -> None:
+    fake_mcp_tool = MagicMock()
+    fake_mcp_tool.name = "get_schema"
+    fake_mcp_tool.description = "Describe the warehouse."
+    fake_mcp_tool.inputSchema = {"type": "object", "properties": {}}
 
-    with patch("eaa.agent.mcp_client.MultiServerMCPClient") as mock_client_cls:
-        mock_client = mock_client_cls.return_value
-        mock_client.get_tools = AsyncMock(return_value=fake_tools)
+    fake_list_result = MagicMock()
+    fake_list_result.tools = [fake_mcp_tool]
+
+    fake_session = AsyncMock()
+    fake_session.list_tools.return_value = fake_list_result
+
+    with patch("eaa.agent.mcp_client._open_session") as mock_open_session:
+        mock_open_session.return_value.__aenter__.return_value = fake_session
 
         tools = await mcp_client.get_mcp_tools("http://127.0.0.1:8001/mcp")
 
-    assert tools == fake_tools
+    assert len(tools) == 1
+    assert tools[0].name == "get_schema"
+    assert tools[0].description == "Describe the warehouse."
 
 
 def test_load_mcp_tools_runs_the_async_version_synchronously() -> None:
@@ -256,50 +297,129 @@ And add to `[tool.pytest.ini_options]`:
 asyncio_mode = "auto"
 ```
 
-Run `uv sync --extra dev` after this change, before continuing.
+Run `uv sync --extra dev` after this change, before continuing. The exact shape of the
+first test's mocking (`_open_session` as a single patchable async-context-manager
+function) assumes you structure `mcp_client.py` with a private `_open_session(url)`
+helper, as in Step 4 below — this makes the connection-opening logic mockable as one
+unit rather than needing to mock `streamablehttp_client` and `ClientSession` separately.
+If you structure it differently, adjust this test's mocking to match, but keep testing
+the same thing: given a raw MCP tool description, `get_mcp_tools` produces a
+`StructuredTool` with the right name/description.
 
-- [ ] **Step 3: Run and confirm failure**
+- [ ] **Step 4: Run and confirm failure**
 
 Run: `uv run pytest tests/agent/test_mcp_client.py -v`
 Expected: `FAIL` — `ModuleNotFoundError: No module named 'eaa.agent.mcp_client'`
 
-- [ ] **Step 4: Implement `src/eaa/agent/mcp_client.py`**
+- [ ] **Step 5: Implement `src/eaa/agent/mcp_client.py`**
 
 ```python
-"""Connects to Phase 1's MCP server and exposes its tools as LangChain tools."""
+"""Connects to Phase 1's MCP server (via the official mcp SDK) and exposes its
+tools as LangChain StructuredTools, since langchain-mcp-adapters (the originally
+planned integration) is unmaintained and incompatible with mcp>=2.0 -- see
+docs/superpowers/specs/2026-10-21-langgraph-agent-design.md.
+"""
 
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 
-from langchain_mcp_adapters.client import MultiServerMCPClient
-
-
-async def get_mcp_tools(url: str) -> list:
-    """Fetch the warehouse MCP server's tools as LangChain tools."""
-    client = MultiServerMCPClient(
-        {"warehouse": {"url": url, "transport": "streamable_http"}}
-    )
-    return await client.get_tools()
+from langchain_core.tools import StructuredTool
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 
-def load_mcp_tools(url: str) -> list:
+@asynccontextmanager
+async def _open_session(url: str):
+    async with streamablehttp_client(url) as (read_stream, write_stream, _):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            yield session
+
+
+def _make_tool_caller(url: str, name: str):
+    async def _call(**kwargs) -> str:
+        async with _open_session(url) as session:
+            result = await session.call_tool(name, kwargs)
+            return "".join(block.text for block in result.content if hasattr(block, "text"))
+
+    return _call
+
+
+async def get_mcp_tools(url: str) -> list[StructuredTool]:
+    """Fetch the warehouse MCP server's tools as LangChain StructuredTools."""
+    async with _open_session(url) as session:
+        mcp_tools = (await session.list_tools()).tools
+
+    return [
+        StructuredTool.from_function(
+            coroutine=_make_tool_caller(url, mcp_tool.name),
+            name=mcp_tool.name,
+            description=mcp_tool.description or "",
+            args_schema=mcp_tool.inputSchema,
+        )
+        for mcp_tool in mcp_tools
+    ]
+
+
+def load_mcp_tools(url: str) -> list[StructuredTool]:
     """Synchronous wrapper for get_mcp_tools, for use at process startup."""
     return asyncio.run(get_mcp_tools(url))
 ```
 
-Adjust the `MultiServerMCPClient({...})` config shape to match what Step 1 actually found, if different.
+**This code opens a new connection per tool call** (inside `_make_tool_caller`'s
+`_call`), rather than keeping one connection open for the agent's whole lifetime. This
+is a deliberate simplicity trade-off for Phase 2's scope (a tool call happens
+occasionally, not in a tight loop, so per-call connection overhead is acceptable) —
+note it in a comment, and don't "optimize" it into a shared long-lived session unless a
+real need appears.
 
-- [ ] **Step 5: Run and confirm success**
+Adjust this code to match whatever Step 2 actually found if `StructuredTool.from_function`
+doesn't accept `args_schema` as a raw JSON schema dict (it may require a Pydantic model
+instead — if so, check `langchain_core.utils.json_schema` or similar for a JSON-schema-to-
+Pydantic-model converter, or build one with `pydantic.create_model`), or if
+`call_tool`'s result shape differs from `result.content[i].text`.
+
+- [ ] **Step 6: Run and confirm success**
 
 Run: `uv run pytest tests/agent/test_mcp_client.py -v`
 Expected: `PASS`
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Verify against the real, running MCP server before committing**
+
+The mocked test above can't catch a wrong URL, wrong `inputSchema` handling, or a wrong
+`call_tool` result shape. Prove the adapter works for real:
 
 ```bash
-git add src/eaa/agent/mcp_client.py tests/agent/test_mcp_client.py pyproject.toml uv.lock
-git commit -m "feat: add MCP client wrapper fetching warehouse tools for the agent"
+uv run eaa-mcp-server &
+sleep 2
+uv run python -c "
+import asyncio
+from eaa.agent.mcp_client import get_mcp_tools
+
+async def main():
+    tools = await get_mcp_tools('http://127.0.0.1:8001/mcp')
+    print(f'{len(tools)} tools:', [t.name for t in tools])
+    schema_tool = next(t for t in tools if t.name == 'get_schema')
+    result = await schema_tool.coroutine()
+    print('get_schema result:', result[:200])
+
+asyncio.run(main())
+"
+kill %1
+```
+
+Expected: `4 tools: ['get_schema', 'run_sql_query', 'get_latest_forecast', 'get_forecast_history']`
+(order may vary) and a real schema description string printed from actually calling
+the tool end-to-end. If this fails, fix `mcp_client.py` and re-run before committing —
+don't commit on the mocked test passing alone.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add pyproject.toml uv.lock src/eaa/agent/mcp_client.py tests/agent/test_mcp_client.py
+git commit -m "feat: add hand-rolled MCP client adapter over the official mcp SDK"
 ```
 
 ---
