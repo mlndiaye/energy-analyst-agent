@@ -5,6 +5,7 @@ from __future__ import annotations
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
+from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 SYSTEM_PROMPT = """\
@@ -25,7 +26,7 @@ def default_model() -> BaseChatModel:
 
 
 def build_agent(
-    tools: list,
+    tools: list[BaseTool],
     model: BaseChatModel | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
 ):
