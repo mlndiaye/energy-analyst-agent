@@ -75,10 +75,16 @@ becomes the `StructuredTool`'s args schema, and the tool's async function calls
 `ClientSession.call_tool(name, args)` and returns its result. No new dependency
 required — `langchain_core` (already pulled in by `langchain`) provides `StructuredTool`.
 
-The connection is established once at process startup (FastAPI or CLI), not per-request;
-if the MCP server is unreachable at startup, the process fails immediately with a clear
-message (not a half-initialized agent that fails confusingly on the first real request)
-— matching Phase 1's `_check_required_env_vars()` fail-fast pattern.
+Tool listing happens once at startup (`load_mcp_tools`); each individual tool call opens
+its own short-lived session (see the per-call-connection trade-off noted in
+`mcp_client.py`). If the MCP server is unreachable at startup, the process fails
+immediately with a clear message (not a half-initialized agent that fails confusingly
+on the first real request) — matching Phase 1's `_check_required_env_vars()` fail-fast
+pattern. If the MCP server dies or becomes unreachable *during* a conversation, a later
+tool call fails on its own short-lived connection attempt; `mcp_client.py` catches that
+and returns a clean error string to the agent rather than letting it crash the graph
+invocation (LangGraph's default `ToolNode` only catches `ValidationError`/`ToolException`
+— anything else would otherwise abort the whole turn).
 
 ### Memory: LangGraph's `SqliteSaver` checkpointer
 
@@ -148,6 +154,11 @@ running MCP server) closes out the implementation, mirroring Phase 1's Task 13.
 - Swapping in an Ollama model for Phase 3's comparison is a config change to
   `build_agent()`'s model argument, not a code change — a direct result of using
   `init_chat_model` instead of a provider-specific import.
+- `mcp_client.py` opens a new MCP connection per tool call (see "MCP client" above).
+  Fine for Phase 2's interactive use (CLI/API, occasional calls) — but Phase 3's
+  benchmark calls tools across many evaluation questions. If benchmark latency ends up
+  dominated by connection setup rather than actual tool execution, revisit this (e.g. a
+  shared long-lived session) at that point.
 
 ## Out of scope for Phase 2
 
