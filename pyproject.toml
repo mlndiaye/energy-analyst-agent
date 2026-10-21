@@ -8,6 +8,12 @@ dependencies = [
     "requests",
     "mcp[cli]>=2.0,<3.0",
     "python-dotenv",
+    "langgraph",
+    "langchain",
+    "langchain-anthropic",
+    "langchain-mcp-adapters",
+    "langgraph-checkpoint-sqlite",
+    "fastapi[standard]",
 ]
 
 [project.optional-dependencies]
@@ -16,6 +22,7 @@ dev = ["pytest", "ruff"]
 [project.scripts]
 warehouse = "eaa.cli:main"
 eaa-mcp-server = "eaa.mcp.server:main"
+eaa-agent = "eaa.agent.cli:main"
 
 [build-system]
 requires = ["hatchling"]

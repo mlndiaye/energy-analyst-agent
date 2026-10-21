@@ -225,3 +225,6 @@ CLAUDE.md
 # DuckDB warehouse (rebuilt from source APIs via `warehouse backfill`)
 *.duckdb
 *.duckdb.wal
+
+# LangGraph conversation memory (local, rebuildable)
+agent_memory.sqlite
