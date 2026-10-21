@@ -16,7 +16,8 @@ def main() -> None:
     load_dotenv()
     mcp_url = os.environ.get("MCP_SERVER_URL", "http://127.0.0.1:8001/mcp")
 
-    agent = build_agent(tools=load_mcp_tools(mcp_url), checkpointer=get_checkpointer())
+    checkpointer = get_checkpointer()
+    agent = build_agent(tools=load_mcp_tools(mcp_url), checkpointer=checkpointer)
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -32,10 +33,12 @@ def main() -> None:
 
         try:
             result = agent.invoke({"messages": [("user", question)]}, config=config)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- REPL should recover and keep prompting, not propagate
             print(f"Error: {exc}")
             continue
         print(result["messages"][-1].content)
+
+    checkpointer.conn.close()
 
 
 if __name__ == "__main__":

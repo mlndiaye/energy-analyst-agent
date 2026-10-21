@@ -38,8 +38,12 @@ def test_repl_uses_one_thread_id_for_the_whole_session() -> None:
     ):
         cli.main()
 
-    first_thread_id = fake_agent.invoke.call_args_list[0].kwargs["config"]["configurable"]["thread_id"]
-    second_thread_id = fake_agent.invoke.call_args_list[1].kwargs["config"]["configurable"]["thread_id"]
+    first_thread_id = fake_agent.invoke.call_args_list[0].kwargs["config"]["configurable"][
+        "thread_id"
+    ]
+    second_thread_id = fake_agent.invoke.call_args_list[1].kwargs["config"]["configurable"][
+        "thread_id"
+    ]
     assert first_thread_id == second_thread_id
     assert uuid.UUID(first_thread_id)  # it's a real UUID
 
