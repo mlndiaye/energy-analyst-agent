@@ -8,14 +8,21 @@ from __future__ import annotations
 from datetime import date
 
 import duckdb
+from mcp.server.mcpserver.exceptions import ToolError
 
 from eaa.mcp.forecast_client import ForecastAPIError, fetch_forecast_history, fetch_latest_forecast
 
 # Error-shape split (intentional, not an inconsistency):
-# - run_sql_query_impl raises (ValueError for a rejected query shape, or a
-#   duckdb.Error propagated from execution) on failure. server.py's @mcp.tool()
+# - run_sql_query_impl raises ToolError (for a rejected query shape, or a
+#   duckdb.Error wrapped from execution) on failure. server.py's @mcp.tool()
 #   wrapper turns that into a protocol-level isError=true tool result -- bad
 #   SQL is a caller/LLM-side mistake worth surfacing as a hard error.
+#   ToolError specifically (not a bare ValueError/duckdb.Error) because the
+#   installed mcp SDK's Tool.run() only preserves the original message for
+#   exceptions it recognizes as "anticipated" (ToolError/ResourceError/MCPError);
+#   anything else is replaced with a generic "Error executing tool <name>"
+#   before it reaches the client -- see
+#   .venv/lib/*/site-packages/mcp/server/mcpserver/tools/base.py:Tool.run.
 # - get_schema_impl / get_latest_forecast_impl / get_forecast_history_impl catch
 #   their failures and return a normal {"error": ...} dict instead -- a
 #   protocol-level *success* whose payload happens to describe an operational
@@ -44,20 +51,26 @@ def get_schema_impl(con: duckdb.DuckDBPyConnection) -> str:
 
 def run_sql_query_impl(con: duckdb.DuckDBPyConnection, query: str) -> list[dict]:
     """Execute a single read-only SELECT (or WITH ... SELECT) against the warehouse,
-    capped at MAX_ROWS rows. Raises on a rejected query shape or a DuckDB error --
-    see the error-shape comment above.
+    capped at MAX_ROWS rows. Raises ToolError on a rejected query shape or a DuckDB
+    error -- see the error-shape comment above.
     """
     normalized = query.strip().rstrip(";")
     if ";" in normalized:
-        raise ValueError("Only a single SQL statement is allowed")
+        raise ToolError("Only a single SQL statement is allowed")
     # Note: a WITH clause can terminate in DELETE/INSERT/UPDATE in DuckDB's
     # grammar, not just SELECT -- rejecting that is intentionally left to the
     # read-only connection the MCP server always opens this with (see design
     # spec), not to this string check.
     if not normalized.upper().startswith(("SELECT", "WITH")):
-        raise ValueError("Only SELECT (or WITH ... SELECT) queries are allowed")
+        raise ToolError("Only SELECT (or WITH ... SELECT) queries are allowed")
 
-    result = con.execute(normalized)
+    try:
+        result = con.execute(normalized)
+    except duckdb.Error as exc:
+        # Re-raised as ToolError so the real reason (bad table/column, a write
+        # blocked by the read-only connection, etc.) survives to the MCP client
+        # instead of being replaced by a generic "Error executing tool" message.
+        raise ToolError(f"SQL execution failed: {exc}") from exc
     columns = [d[0] for d in result.description]
     rows = result.fetchmany(MAX_ROWS + 1)
     truncated = len(rows) > MAX_ROWS

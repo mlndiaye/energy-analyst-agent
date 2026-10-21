@@ -3,6 +3,7 @@ from unittest.mock import patch
 import duckdb
 import pandas as pd
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from eaa import warehouse
 from eaa.mcp import tools
@@ -33,12 +34,12 @@ def test_get_schema_lists_tables_and_distinct_sources(con) -> None:
 
 
 def test_run_sql_query_rejects_non_select(con) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ToolError, match="Only SELECT"):
         tools.run_sql_query_impl(con, "DELETE FROM consumption_hourly")
 
 
 def test_run_sql_query_rejects_multiple_statements(con) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ToolError, match="single SQL statement"):
         tools.run_sql_query_impl(con, "SELECT 1; SELECT 2")
 
 
@@ -70,9 +71,18 @@ def test_run_sql_query_cte_write_blocked_by_readonly_connection(tmp_path) -> Non
     write_con.close()
 
     read_con = warehouse.get_connection(db_path, read_only=True)
-    with pytest.raises(duckdb.Error):
+    with pytest.raises(ToolError) as exc_info:
         tools.run_sql_query_impl(read_con, "WITH t AS (SELECT 1) DELETE FROM consumption_hourly")
     read_con.close()
+
+    # The original duckdb.Error must still be reachable, not swallowed -- that's
+    # the whole point of wrapping in ToolError rather than letting it propagate bare.
+    assert isinstance(exc_info.value.__cause__, duckdb.Error)
+
+
+def test_run_sql_query_wraps_duckdb_execution_errors_with_original_message(con) -> None:
+    with pytest.raises(ToolError, match="nonexistent_table"):
+        tools.run_sql_query_impl(con, "SELECT * FROM nonexistent_table")
 
 
 def test_run_sql_query_returns_rows_as_dicts(con) -> None:
