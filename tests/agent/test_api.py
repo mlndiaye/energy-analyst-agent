@@ -52,3 +52,23 @@ def test_lifespan_shutdown_closes_the_checkpointer_connection() -> None:
         with TestClient(app) as client:
             client.get("/health")
         mock_checkpointer.conn.close.assert_called_once()
+
+
+def test_ask_returns_502_when_agent_invocation_fails() -> None:
+    with patch("eaa.agent.api.AGENT") as mock_agent:
+        mock_agent.invoke.side_effect = Exception("boom")
+
+        client = TestClient(app)
+        response = client.post("/ask", json={"question": "hi"})
+
+    assert response.status_code == 502
+    assert "boom" in response.json()["detail"]
+
+
+def test_ask_rejects_an_empty_question() -> None:
+    with patch("eaa.agent.api.AGENT") as mock_agent:
+        client = TestClient(app)
+        response = client.post("/ask", json={"question": ""})
+
+    assert response.status_code == 422
+    mock_agent.invoke.assert_not_called()

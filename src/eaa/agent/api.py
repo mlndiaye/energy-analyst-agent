@@ -7,8 +7,8 @@ import uuid
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
 from eaa.agent.graph import build_agent
 from eaa.agent.mcp_client import load_mcp_tools
@@ -36,7 +36,7 @@ app = FastAPI(title="energy-analyst-agent", lifespan=lifespan)
 
 
 class AskRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1)
     session_id: str | None = None
 
 
@@ -62,7 +62,11 @@ def ask(request: AskRequest) -> AskResponse:
     session_id = request.session_id or str(uuid.uuid4())
     config = {"configurable": {"thread_id": session_id}}
 
-    result = AGENT.invoke({"messages": [("user", request.question)]}, config=config)
+    try:
+        result = AGENT.invoke({"messages": [("user", request.question)]}, config=config)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"agent invocation failed: {exc}") from exc
+
     messages = result["messages"]
 
     return AskResponse(
