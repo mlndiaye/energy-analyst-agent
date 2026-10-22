@@ -228,3 +228,6 @@ CLAUDE.md
 
 # LangGraph conversation memory (local, rebuildable)
 agent_memory.sqlite
+
+# Benchmark raw results (local, rebuildable by re-running `eaa-benchmark`)
+benchmark_results.json
