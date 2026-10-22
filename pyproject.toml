@@ -10,7 +10,7 @@ dependencies = [
     "python-dotenv",
     "langgraph",
     "langchain",
-    "langchain-anthropic",
+    "langchain-google-genai",
     "langgraph-checkpoint-sqlite",
     "fastapi[standard]",
     "langchain-ollama",

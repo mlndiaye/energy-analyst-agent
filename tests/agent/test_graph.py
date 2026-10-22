@@ -55,8 +55,8 @@ def test_build_agent_uses_the_system_prompt() -> None:
     assert "power system" in system_messages[0].content.lower()
 
 
-def test_default_model_uses_current_sonnet_id() -> None:
+def test_default_model_uses_current_gemini_id() -> None:
     with patch("eaa.agent.graph.init_chat_model") as mock_init:
         graph.default_model()
 
-    mock_init.assert_called_once_with("anthropic:claude-sonnet-5-5")
+    mock_init.assert_called_once_with("google_genai:gemini-3.5-flash")

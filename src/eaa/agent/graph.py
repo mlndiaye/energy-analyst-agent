@@ -21,8 +21,8 @@ data wasn't available and why, rather than guessing or inventing a number.
 
 
 def default_model() -> BaseChatModel:
-    """The default chat model for this agent: Claude, via Anthropic."""
-    return init_chat_model("anthropic:claude-sonnet-5-5")
+    """The default chat model for this agent: Gemini, via Google GenAI."""
+    return init_chat_model("google_genai:gemini-3.5-flash")
 
 
 def build_agent(
