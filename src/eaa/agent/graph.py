@@ -22,7 +22,7 @@ data wasn't available and why, rather than guessing or inventing a number.
 
 def default_model() -> BaseChatModel:
     """The default chat model for this agent: Claude, via Anthropic."""
-    return init_chat_model("anthropic:claude-sonnet-4-5-20250929")
+    return init_chat_model("anthropic:claude-sonnet-5-5")
 
 
 def build_agent(

@@ -1,4 +1,5 @@
 from typing import Any
+from unittest.mock import patch
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -52,3 +53,10 @@ def test_build_agent_uses_the_system_prompt() -> None:
     system_messages = [m for m in sent_messages if m.type == "system"]
     assert len(system_messages) == 1
     assert "power system" in system_messages[0].content.lower()
+
+
+def test_default_model_uses_current_sonnet_id() -> None:
+    with patch("eaa.agent.graph.init_chat_model") as mock_init:
+        graph.default_model()
+
+    mock_init.assert_called_once_with("anthropic:claude-sonnet-5-5")
