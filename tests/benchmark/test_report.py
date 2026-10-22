@@ -1,0 +1,41 @@
+from dataclasses import dataclass
+
+from eaa.benchmark import report
+
+
+@dataclass
+class _FakeRunResult:
+    question_id: str
+    category: str
+    model_key: str
+    correct: bool
+    all_expected_tools_called: bool
+    cost_usd: float
+    latency_seconds: float
+
+
+def _results() -> list[_FakeRunResult]:
+    return [
+        _FakeRunResult("lookup-1", "lookup", "claude-sonnet-5-5", True, True, 0.01, 1.2),
+        _FakeRunResult("lookup-2", "lookup", "claude-sonnet-5-5", False, True, 0.01, 1.1),
+        _FakeRunResult("lookup-1", "lookup", "ollama:llama3.2", False, False, 0.0, 2.5),
+        _FakeRunResult("lookup-2", "lookup", "ollama:llama3.2", True, True, 0.0, 2.1),
+    ]
+
+
+def test_render_markdown_includes_a_row_per_model() -> None:
+    markdown = report.render_markdown(_results())
+    assert "claude-sonnet-5-5" in markdown
+    assert "ollama:llama3.2" in markdown
+
+
+def test_render_markdown_reports_correct_accuracy_percentage() -> None:
+    markdown = report.render_markdown(_results())
+    # claude-sonnet-5-5: 1/2 correct = 50%
+    assert "50.0%" in markdown
+
+
+def test_render_markdown_reports_average_cost_and_latency() -> None:
+    markdown = report.render_markdown(_results())
+    # claude-sonnet-5-5 average cost: (0.01 + 0.01) / 2 = 0.01
+    assert "0.0100" in markdown or "$0.01" in markdown
