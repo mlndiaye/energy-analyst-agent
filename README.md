@@ -15,25 +15,30 @@ the real API, but the ENTSO-E day-ahead price connector is still pending real-AP
 verification (requires an API token requested by email — see
 [ADR 0001](docs/decisions/0001-entsoe-day-ahead-prices.md)).
 
-**Phase 2 — shipped**: a LangGraph ReAct agent (Claude by default) using Phase 1's MCP
+**Phase 2 — shipped, verified against a real LLM call**: a LangGraph ReAct agent
+(Gemini by default, via Google GenAI — swapped in for Claude for budget reasons, see
+[ADR 0003](docs/decisions/0003-gemini-instead-of-claude.md)) using Phase 1's MCP
 server as tools, with local SQLite conversation memory, served over a FastAPI endpoint
 (`POST /ask`) and an interactive CLI (`uv run eaa-agent`). All code is built and tested
-(67 tests). A real end-to-end Claude verification (actual tool calls, multi-turn memory,
-`/ask` over HTTP) is still pending an `ANTHROPIC_API_KEY` — no key is configured in this
-environment, so this remains an open verification gap, the same way Phase 1's ENTSO-E
-connector is pending real-API verification (see
-[ADR 0001](docs/decisions/0001-entsoe-day-ahead-prices.md)).
+(99 tests). A real end-to-end run (real Gemini call, real tool calls over the real MCP
+server) surfaced two bugs invisible to the mocked test suite — a sync `agent.invoke()`
+can't call the MCP tools (coroutine-only) or use the sync `SqliteSaver` checkpointer —
+fixed by switching the whole call chain to async (see
+[ADR 0004](docs/decisions/0004-async-agent-invocation.md)). After the fix, a real run
+correctly called `get_schema` and `get_latest_forecast` and produced a coherent answer,
+including a clean "forecast unavailable" when a tool call failed, rather than a
+hallucinated number.
 
-**Phase 3 — shipped (code), real run pending**: a custom benchmark comparing Claude
-Sonnet 5.5 against two local Ollama models (`llama3.2`, `llama3.1:8b`) on accuracy,
-tool use, cost, and latency over 15 questions (5 lookup, 5 aggregation, 5 multi-tool),
-with Langfuse tracing. All code is built and tested (99 tests) against mocks. The
-real, paid/data-dependent run (`uv run eaa-benchmark`) is still pending: it needs
-`ANTHROPIC_API_KEY` (paid, ~a few dollars for 45 runs), a populated `warehouse.duckdb`,
-Ollama running locally (the two required models are already pulled), and Langfuse
-credentials — none of which are available in this environment. This mirrors Phase 1's
-ENTSO-E gap and Phase 2's live-Claude-verification gap: documented honestly rather
-than faked.
+**Phase 3 — shipped (code), real benchmark run pending**: a custom benchmark comparing
+Gemini 3.5 Flash against two local Ollama models (`llama3.2`, `llama3.1:8b`) on
+accuracy, tool use, cost, and latency over 15 questions (5 lookup, 5 aggregation, 5
+multi-tool), with Langfuse tracing (verified working against the real cloud
+dashboard). All code is built and tested (99 tests) against mocks. The real run
+(`uv run eaa-benchmark`) is still pending a populated `warehouse.duckdb`, which is
+blocked on Phase 1's ENTSO-E token (see
+[ADR 0001](docs/decisions/0001-entsoe-day-ahead-prices.md)); `GOOGLE_API_KEY` and
+Langfuse credentials are already configured and verified, and Ollama has both
+required models pulled.
 
 ## Getting started (Phase 1)
 
@@ -72,18 +77,17 @@ curl -X POST http://127.0.0.1:8002/ask -H "Content-Type: application/json" \
   -d '{"question": "What was yesterday'"'"'s consumption?"}'
 ```
 
-Requires `ANTHROPIC_API_KEY` in `.env` (see `.env.example`). **Not yet verified against
-a real Claude call in this environment** — no `ANTHROPIC_API_KEY` is configured here, so
-the agent, memory and `/ask` endpoint are covered by the unit/integration test suite
-(mocked LLM calls) but not by an actual end-to-end run. Before relying on this for a
-live demo, run it once with a real key and confirm: tool calls show up in the trace
-(no hallucinated numbers), multi-turn memory holds across turns, and `/ask` returns a
-non-empty `tool_calls` array.
+Requires `GOOGLE_API_KEY` in `.env` (see `.env.example` — a free-tier key from
+[Google AI Studio](https://aistudio.google.com/apikey) works). Verified against a real
+Gemini call: tool calls show up correctly, and a failed tool call produces a clean
+"data wasn't available" answer instead of a hallucinated number. Multi-turn memory and
+the `/ask` HTTP path are still only covered by the mocked test suite, not a live run —
+worth re-confirming before a live demo.
 
 ## Running the benchmark (Phase 3)
 
 Requires `eaa-mcp-server` running (port 8001), a populated `warehouse.duckdb`
-(`uv run warehouse backfill`), `ANTHROPIC_API_KEY` and `LANGFUSE_PUBLIC_KEY`/
+(`uv run warehouse backfill`), `GOOGLE_API_KEY` and `LANGFUSE_PUBLIC_KEY`/
 `LANGFUSE_SECRET_KEY` in `.env`, and Ollama running locally with `llama3.2` and
 `llama3.1:8b` pulled (`ollama pull llama3.2 && ollama pull llama3.1:8b`).
 
@@ -94,9 +98,9 @@ uv run eaa-benchmark
 
 Writes `docs/benchmark_report.md` (committable once a real run has happened) and
 `benchmark_results.json` (local, gitignored raw results). **Not yet run in this
-environment** — no `ANTHROPIC_API_KEY`, no `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`,
-and no populated `warehouse.duckdb` are available here (Ollama itself is ready: both
-`llama3.2` and `llama3.1:8b` are already pulled). Once those three gaps are closed —
-by the user, deliberately, since the Claude calls cost real money — `docs/benchmark_report.md`
-should be regenerated and committed so the portfolio shows real, current numbers
-rather than this plan's own illustrative examples.
+environment** — `warehouse.duckdb` isn't populated yet (blocked on Phase 1's ENTSO-E
+token). `GOOGLE_API_KEY` and Langfuse credentials are configured and verified working,
+and Ollama has both `llama3.2` and `llama3.1:8b` already pulled. Once the ENTSO-E
+token closes that last gap, run the benchmark for real and commit the regenerated
+`docs/benchmark_report.md` so the portfolio shows real, current numbers rather than
+this plan's own illustrative examples.
