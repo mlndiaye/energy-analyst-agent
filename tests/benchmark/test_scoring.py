@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import duckdb
 import pytest
@@ -49,7 +49,9 @@ def test_score_accuracy_with_no_number_in_answer_is_incorrect() -> None:
 
 
 def test_score_tool_use_all_expected_called() -> None:
-    question = _FakeQuestion(tolerance=0, expected_tools=["run_sql_query"], ground_truth_fn=lambda con: 0)
+    question = _FakeQuestion(
+        tolerance=0, expected_tools=["run_sql_query"], ground_truth_fn=lambda con: 0
+    )
     tool_calls = [{"name": "run_sql_query", "args": {}, "result": "ok"}]
     result = scoring.score_tool_use(question, tool_calls)
     assert result["all_expected_called"] is True
@@ -58,7 +60,9 @@ def test_score_tool_use_all_expected_called() -> None:
 
 def test_score_tool_use_missing_an_expected_tool() -> None:
     question = _FakeQuestion(
-        tolerance=0, expected_tools=["run_sql_query", "get_latest_forecast"], ground_truth_fn=lambda con: 0
+        tolerance=0,
+        expected_tools=["run_sql_query", "get_latest_forecast"],
+        ground_truth_fn=lambda con: 0,
     )
     tool_calls = [{"name": "run_sql_query", "args": {}, "result": "ok"}]
     result = scoring.score_tool_use(question, tool_calls)
@@ -67,7 +71,9 @@ def test_score_tool_use_missing_an_expected_tool() -> None:
 
 
 def test_score_tool_use_tolerates_an_extra_unexpected_call() -> None:
-    question = _FakeQuestion(tolerance=0, expected_tools=["run_sql_query"], ground_truth_fn=lambda con: 0)
+    question = _FakeQuestion(
+        tolerance=0, expected_tools=["run_sql_query"], ground_truth_fn=lambda con: 0
+    )
     tool_calls = [
         {"name": "get_schema", "args": {}, "result": "ok"},
         {"name": "run_sql_query", "args": {}, "result": "ok"},

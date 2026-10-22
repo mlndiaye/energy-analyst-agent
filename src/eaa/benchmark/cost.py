@@ -29,6 +29,6 @@ def compute_cost(model_key: str, messages: list) -> float:
             input_tokens += usage.get("input_tokens", 0)
             output_tokens += usage.get("output_tokens", 0)
 
-    return (input_tokens / 1_000_000) * pricing["input"] + (
-        output_tokens / 1_000_000
-    ) * pricing["output"]
+    return (input_tokens / 1_000_000) * pricing["input"] + (output_tokens / 1_000_000) * pricing[
+        "output"
+    ]

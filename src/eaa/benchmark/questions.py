@@ -7,8 +7,9 @@ number -- stays correct as the warehouse is backfilled with more data over time.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import Literal
 
 import duckdb
 
@@ -100,8 +101,7 @@ _AGGREGATION_QUESTIONS = [
         id="aggregation-1",
         category="aggregation",
         question=(
-            "What was the average hourly consumption over the most recent 7 days "
-            "of data, in MW?"
+            "What was the average hourly consumption over the most recent 7 days of data, in MW?"
         ),
         ground_truth_fn=_sql_ground_truth(
             "SELECT AVG(consumption_mw) FROM consumption_hourly "
@@ -143,8 +143,7 @@ _AGGREGATION_QUESTIONS = [
         id="aggregation-4",
         category="aggregation",
         question=(
-            "What was the minimum hourly consumption over the most recent 30 days "
-            "of data, in MW?"
+            "What was the minimum hourly consumption over the most recent 30 days of data, in MW?"
         ),
         ground_truth_fn=_sql_ground_truth(
             "SELECT MIN(consumption_mw) FROM consumption_hourly "
