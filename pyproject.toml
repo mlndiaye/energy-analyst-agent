@@ -12,6 +12,7 @@ dependencies = [
     "langchain",
     "langchain-google-genai",
     "langgraph-checkpoint-sqlite",
+    "aiosqlite",
     "fastapi[standard]",
     "langchain-ollama",
     "langfuse",

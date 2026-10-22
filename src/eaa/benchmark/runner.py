@@ -1,5 +1,10 @@
-"""Orchestrates the benchmark: one agent.invoke() per (model, question) pair,
+"""Orchestrates the benchmark: one agent.ainvoke() per (model, question) pair,
 scoring each run's accuracy, tool use, cost, and latency.
+
+Async, not sync: the MCP tools built in mcp_client.py are coroutine-only, so a
+sync agent.invoke() raises NotImplementedError the moment any model (Gemini or
+an Ollama model) calls one -- which is every real run, since the whole point
+of these questions is to make the agent call a tool.
 """
 
 from __future__ import annotations
@@ -31,7 +36,7 @@ class RunResult:
     latency_seconds: float
 
 
-def run_one(
+async def run_one(
     question: BenchmarkQuestion,
     model_key: str,
     agent: Any,
@@ -48,7 +53,7 @@ def run_one(
             "question_id": question.id,
             "category": question.category,
         }
-    result = agent.invoke(
+    result = await agent.ainvoke(
         {"messages": [("user", question.question)]},
         config=config or None,
     )
@@ -76,7 +81,7 @@ def run_one(
     )
 
 
-def run_benchmark(
+async def run_benchmark(
     models: dict[str, Any],
     questions: list[BenchmarkQuestion],
     tools: list,
@@ -89,5 +94,5 @@ def run_benchmark(
     for model_key, model in models.items():
         agent = build_agent(tools=tools, model=model)
         for question in questions:
-            results.append(run_one(question, model_key, agent, con, callbacks))
+            results.append(await run_one(question, model_key, agent, con, callbacks))
     return results

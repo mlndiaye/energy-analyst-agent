@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 with (
     patch("eaa.agent.mcp_client.load_mcp_tools", return_value=[]),
@@ -23,7 +23,7 @@ def test_health() -> None:
 
 def test_ask_returns_answer_and_generates_a_session_id() -> None:
     with patch("eaa.agent.api.AGENT") as mock_agent:
-        mock_agent.invoke.return_value = _fake_agent_result("42 TWh")
+        mock_agent.ainvoke = AsyncMock(return_value=_fake_agent_result("42 TWh"))
 
         client = TestClient(app)
         response = client.post("/ask", json={"question": "yesterday's consumption?"})
@@ -37,18 +37,19 @@ def test_ask_returns_answer_and_generates_a_session_id() -> None:
 
 def test_ask_reuses_a_provided_session_id() -> None:
     with patch("eaa.agent.api.AGENT") as mock_agent:
-        mock_agent.invoke.return_value = _fake_agent_result("ok")
+        mock_agent.ainvoke = AsyncMock(return_value=_fake_agent_result("ok"))
 
         client = TestClient(app)
         response = client.post("/ask", json={"question": "hi", "session_id": "existing-session"})
 
     assert response.json()["session_id"] == "existing-session"
-    call_config = mock_agent.invoke.call_args.kwargs["config"]
+    call_config = mock_agent.ainvoke.call_args.kwargs["config"]
     assert call_config["configurable"]["thread_id"] == "existing-session"
 
 
 def test_lifespan_shutdown_closes_the_checkpointer_connection() -> None:
     with patch("eaa.agent.api._checkpointer") as mock_checkpointer:
+        mock_checkpointer.conn.close = AsyncMock()
         with TestClient(app) as client:
             client.get("/health")
         mock_checkpointer.conn.close.assert_called_once()
@@ -56,7 +57,7 @@ def test_lifespan_shutdown_closes_the_checkpointer_connection() -> None:
 
 def test_ask_returns_502_when_agent_invocation_fails() -> None:
     with patch("eaa.agent.api.AGENT") as mock_agent:
-        mock_agent.invoke.side_effect = Exception("boom")
+        mock_agent.ainvoke = AsyncMock(side_effect=Exception("boom"))
 
         client = TestClient(app)
         response = client.post("/ask", json={"question": "hi"})
@@ -67,8 +68,9 @@ def test_ask_returns_502_when_agent_invocation_fails() -> None:
 
 def test_ask_rejects_an_empty_question() -> None:
     with patch("eaa.agent.api.AGENT") as mock_agent:
+        mock_agent.ainvoke = AsyncMock()
         client = TestClient(app)
         response = client.post("/ask", json={"question": ""})
 
     assert response.status_code == 422
-    mock_agent.invoke.assert_not_called()
+    mock_agent.ainvoke.assert_not_called()

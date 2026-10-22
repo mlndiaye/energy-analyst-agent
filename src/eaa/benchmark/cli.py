@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from dataclasses import asdict
@@ -12,7 +13,7 @@ from langchain.chat_models import init_chat_model
 from langfuse.langchain import CallbackHandler
 
 from eaa import warehouse
-from eaa.agent.mcp_client import load_mcp_tools
+from eaa.agent.mcp_client import get_mcp_tools
 from eaa.benchmark.questions import QUESTIONS
 from eaa.benchmark.report import render_markdown
 from eaa.benchmark.runner import run_benchmark
@@ -25,15 +26,18 @@ def build_langfuse_callbacks() -> list | None:
     return [CallbackHandler()]
 
 
-def main() -> None:
+async def _run() -> None:
     load_dotenv()
 
     mcp_url = os.environ.get("MCP_SERVER_URL", "http://127.0.0.1:8001/mcp")
-    tools = load_mcp_tools(mcp_url)
+    # get_mcp_tools (async), not load_mcp_tools (its sync asyncio.run()
+    # wrapper): we're already inside the event loop started by main() below,
+    # and asyncio.run() cannot be nested inside a running loop.
+    tools = await get_mcp_tools(mcp_url)
     con = warehouse.get_connection(read_only=True)
 
     models = {
-        "claude-sonnet-5-5": init_chat_model("anthropic:claude-sonnet-5-5"),
+        "gemini-3.5-flash": init_chat_model("google_genai:gemini-3.5-flash"),
         "ollama:llama3.2": init_chat_model("ollama:llama3.2"),
         "ollama:llama3.1:8b": init_chat_model("ollama:llama3.1:8b"),
     }
@@ -41,7 +45,7 @@ def main() -> None:
     callbacks = build_langfuse_callbacks()
 
     print(f"Running {len(models)} models x {len(QUESTIONS)} questions...")
-    results = run_benchmark(models, QUESTIONS, tools, con, callbacks)
+    results = await run_benchmark(models, QUESTIONS, tools, con, callbacks)
     con.close()
 
     markdown = render_markdown(results)
@@ -51,6 +55,10 @@ def main() -> None:
     Path("docs/benchmark_report.md").write_text(markdown)
     Path("benchmark_results.json").write_text(json.dumps([asdict(r) for r in results], indent=2))
     print("\nWrote docs/benchmark_report.md and benchmark_results.json")
+
+
+def main() -> None:
+    asyncio.run(_run())
 
 
 if __name__ == "__main__":
