@@ -24,8 +24,16 @@ environment, so this remains an open verification gap, the same way Phase 1's EN
 connector is pending real-API verification (see
 [ADR 0001](docs/decisions/0001-entsoe-day-ahead-prices.md)).
 
-**Phase 3 — ahead**: a custom benchmark comparing Claude against two local Ollama
-models on accuracy, tool use, cost and latency, traced with Langfuse.
+**Phase 3 — shipped (code), real run pending**: a custom benchmark comparing Claude
+Sonnet 5.5 against two local Ollama models (`llama3.2`, `llama3.1:8b`) on accuracy,
+tool use, cost, and latency over 15 questions (5 lookup, 5 aggregation, 5 multi-tool),
+with Langfuse tracing. All code is built and tested (99 tests) against mocks. The
+real, paid/data-dependent run (`uv run eaa-benchmark`) is still pending: it needs
+`ANTHROPIC_API_KEY` (paid, ~a few dollars for 45 runs), a populated `warehouse.duckdb`,
+Ollama running locally (the two required models are already pulled), and Langfuse
+credentials — none of which are available in this environment. This mirrors Phase 1's
+ENTSO-E gap and Phase 2's live-Claude-verification gap: documented honestly rather
+than faked.
 
 ## Getting started (Phase 1)
 
@@ -71,3 +79,24 @@ the agent, memory and `/ask` endpoint are covered by the unit/integration test s
 live demo, run it once with a real key and confirm: tool calls show up in the trace
 (no hallucinated numbers), multi-turn memory holds across turns, and `/ask` returns a
 non-empty `tool_calls` array.
+
+## Running the benchmark (Phase 3)
+
+Requires `eaa-mcp-server` running (port 8001), a populated `warehouse.duckdb`
+(`uv run warehouse backfill`), `ANTHROPIC_API_KEY` and `LANGFUSE_PUBLIC_KEY`/
+`LANGFUSE_SECRET_KEY` in `.env`, and Ollama running locally with `llama3.2` and
+`llama3.1:8b` pulled (`ollama pull llama3.2 && ollama pull llama3.1:8b`).
+
+```bash
+uv run eaa-mcp-server &
+uv run eaa-benchmark
+```
+
+Writes `docs/benchmark_report.md` (committable once a real run has happened) and
+`benchmark_results.json` (local, gitignored raw results). **Not yet run in this
+environment** — no `ANTHROPIC_API_KEY`, no `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`,
+and no populated `warehouse.duckdb` are available here (Ollama itself is ready: both
+`llama3.2` and `llama3.1:8b` are already pulled). Once those three gaps are closed —
+by the user, deliberately, since the Claude calls cost real money — `docs/benchmark_report.md`
+should be regenerated and committed so the portfolio shows real, current numbers
+rather than this plan's own illustrative examples.
