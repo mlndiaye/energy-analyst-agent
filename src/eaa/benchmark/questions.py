@@ -40,6 +40,12 @@ def _sql_ground_truth(sql: str) -> Callable[[duckdb.DuckDBPyConnection], float]:
 
 
 # --- Lookup (single tool, simple fact) ---------------------------------
+#
+# "Most recently recorded" queries below filter out NULL: eco2mix's hourly
+# resample fills a not-yet-reported ("gap") hour with NULL rather than
+# omitting the row (see ingestion/eco2mix.py), so an unfiltered
+# `ORDER BY datetime DESC LIMIT 1` can land on that placeholder instead of
+# the latest real value.
 
 _LOOKUP_QUESTIONS = [
     BenchmarkQuestion(
@@ -47,7 +53,8 @@ _LOOKUP_QUESTIONS = [
         category="lookup",
         question="What was the most recently recorded hourly consumption value, in MW?",
         ground_truth_fn=_sql_ground_truth(
-            "SELECT consumption_mw FROM consumption_hourly ORDER BY datetime DESC LIMIT 1"
+            "SELECT consumption_mw FROM consumption_hourly "
+            "WHERE consumption_mw IS NOT NULL ORDER BY datetime DESC LIMIT 1"
         ),
         tolerance=0.5,
         expected_tools=["run_sql_query"],
@@ -58,7 +65,8 @@ _LOOKUP_QUESTIONS = [
         question="What was the most recently recorded hourly nuclear production value, in MW?",
         ground_truth_fn=_sql_ground_truth(
             "SELECT production_mw FROM production_by_source_hourly "
-            "WHERE source = 'nuclear' ORDER BY datetime DESC LIMIT 1"
+            "WHERE source = 'nuclear' AND production_mw IS NOT NULL "
+            "ORDER BY datetime DESC LIMIT 1"
         ),
         tolerance=0.5,
         expected_tools=["run_sql_query"],
@@ -69,7 +77,8 @@ _LOOKUP_QUESTIONS = [
         question="What was the most recently recorded hourly wind production value, in MW?",
         ground_truth_fn=_sql_ground_truth(
             "SELECT production_mw FROM production_by_source_hourly "
-            "WHERE source = 'wind' ORDER BY datetime DESC LIMIT 1"
+            "WHERE source = 'wind' AND production_mw IS NOT NULL "
+            "ORDER BY datetime DESC LIMIT 1"
         ),
         tolerance=0.5,
         expected_tools=["run_sql_query"],
@@ -79,7 +88,8 @@ _LOOKUP_QUESTIONS = [
         category="lookup",
         question="What was the most recently recorded day-ahead electricity price, in EUR/MWh?",
         ground_truth_fn=_sql_ground_truth(
-            "SELECT price_eur_mwh FROM day_ahead_prices_hourly ORDER BY datetime DESC LIMIT 1"
+            "SELECT price_eur_mwh FROM day_ahead_prices_hourly "
+            "WHERE price_eur_mwh IS NOT NULL ORDER BY datetime DESC LIMIT 1"
         ),
         tolerance=0.5,
         expected_tools=["run_sql_query"],
