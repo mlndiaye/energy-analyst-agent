@@ -17,19 +17,25 @@ import duckdb
 _NUMBER_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
 
 
-def extract_first_number(text: str) -> float | None:
-    """Return the first number found in free text, or None if there isn't one."""
-    match = _NUMBER_RE.search(text)
-    if match is None:
+def extract_last_number(text: str) -> float | None:
+    """Return the last number found in free text, or None if there isn't one.
+
+    The last number, not the first: a small local model often restates part
+    of the question (e.g. "over the most recent 7 days...") before giving its
+    actual answer, and taking the first number then extracts "7" instead of
+    the real value.
+    """
+    matches = list(_NUMBER_RE.finditer(text))
+    if not matches:
         return None
-    return float(match.group().replace(",", "."))
+    return float(matches[-1].group().replace(",", "."))
 
 
 def score_accuracy(question, con: duckdb.DuckDBPyConnection | None, answer_text: str) -> dict:
     """Compare the agent's extracted numeric answer to the question's live
     ground truth, within its tolerance."""
     expected = question.ground_truth_fn(con)
-    extracted = extract_first_number(answer_text)
+    extracted = extract_last_number(answer_text)
     correct = extracted is not None and abs(extracted - expected) <= question.tolerance
     return {"expected": expected, "extracted": extracted, "correct": correct}
 

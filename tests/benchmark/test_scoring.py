@@ -21,10 +21,13 @@ class _FakeQuestion:
         ("It was -3 MW last hour.", -3.0),
         ("Approximately 1,234 MW was consumed.", 1.234),
         ("No numbers here.", None),
+        # A small local model restating the question before answering --
+        # the real answer is the LAST number, not the first one ("7").
+        ("Over the most recent 7 days, the average was 46430.5 MW.", 46430.5),
     ],
 )
-def test_extract_first_number(text: str, expected: float | None) -> None:
-    assert scoring.extract_first_number(text) == expected
+def test_extract_last_number(text: str, expected: float | None) -> None:
+    assert scoring.extract_last_number(text) == expected
 
 
 def test_score_accuracy_within_tolerance_is_correct() -> None:
