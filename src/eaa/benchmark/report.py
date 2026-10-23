@@ -49,4 +49,29 @@ def render_markdown(results: list) -> str:
             f"| {_percentage(tool_ok, n)} | {n} |"
         )
 
+    lines.append("")
+    lines.append("### Interpreting this report")
+    lines.append("")
+    lines.append(
+        "A low or 0% accuracy row does not by itself mean the model failed the "
+        'task. Two very different situations both show up as "incorrect" here '
+        "and this table cannot tell them apart:"
+    )
+    lines.append(
+        "- **The model was never really tested** -- e.g. a cloud provider's "
+        "rate limit was hit repeatedly enough to exhaust retries, so the "
+        '"answer" is actually an error message, not a real attempt.'
+    )
+    lines.append(
+        "- **The model genuinely failed the task** -- e.g. it guessed at a "
+        "table/column name instead of calling `get_schema` first, got a SQL "
+        "error back, and (correctly, per its instructions) reported the data "
+        "as unavailable rather than inventing a number."
+    )
+    lines.append(
+        "Before reading a percentage as a capability score, check the `error` "
+        "field and the tool-call trace for the relevant rows in "
+        "`benchmark_results.json` (one JSON object per question/model run)."
+    )
+
     return "\n".join(lines)
