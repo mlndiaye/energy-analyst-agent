@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
@@ -29,6 +32,7 @@ def build_agent(
     tools: list[BaseTool],
     model: BaseChatModel | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
+    middleware: Sequence[AgentMiddleware] = (),
 ):
     """Build the compiled ReAct agent graph."""
     return create_agent(
@@ -36,4 +40,5 @@ def build_agent(
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
         checkpointer=checkpointer,
+        middleware=middleware,
     )

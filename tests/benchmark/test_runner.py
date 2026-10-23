@@ -58,3 +58,49 @@ async def test_run_benchmark_iterates_every_model_and_question() -> None:
 
     assert len(results) == len(models) * len(questions)
     assert {r.model_key for r in results} == {"model-a", "model-b"}
+
+
+async def test_run_benchmark_passes_a_retry_middleware_when_building_the_agent() -> None:
+    fake_agent = MagicMock()
+    fake_agent.ainvoke = AsyncMock(
+        return_value={"messages": [HumanMessage(content="q"), AIMessage(content="100")]}
+    )
+
+    with patch("eaa.benchmark.runner.build_agent", return_value=fake_agent) as mock_build_agent:
+        await runner.run_benchmark({"model-a": object()}, [_question()], tools=[], con=None)
+
+    assert len(mock_build_agent.call_args.kwargs["middleware"]) == 1
+
+
+async def test_run_one_returns_an_error_result_instead_of_raising_when_the_agent_fails() -> None:
+    fake_agent = MagicMock()
+    fake_agent.ainvoke = AsyncMock(side_effect=RuntimeError("boom"))
+
+    result = await runner.run_one(_question(), "gemini-3.5-flash", fake_agent, con=None)
+
+    assert result.correct is False
+    assert result.extracted is None
+    assert result.all_expected_tools_called is False
+    assert result.called_tools == []
+    assert result.cost_usd == 0.0
+    assert result.latency_seconds >= 0
+    assert result.error is not None and "boom" in result.error
+
+
+async def test_run_benchmark_continues_with_other_questions_after_one_raises() -> None:
+    fake_agent = MagicMock()
+    fake_agent.ainvoke = AsyncMock(
+        side_effect=[
+            RuntimeError("boom"),
+            {"messages": [HumanMessage(content="q"), AIMessage(content="42")]},
+        ]
+    )
+
+    questions = [_question(), _question()]
+    with patch("eaa.benchmark.runner.build_agent", return_value=fake_agent):
+        results = await runner.run_benchmark({"model-a": object()}, questions, tools=[], con=None)
+
+    assert len(results) == 2
+    assert results[0].error is not None
+    assert results[1].error is None
+    assert results[1].correct is True

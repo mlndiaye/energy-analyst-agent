@@ -60,3 +60,13 @@ def test_default_model_uses_current_gemini_id() -> None:
         graph.default_model()
 
     mock_init.assert_called_once_with("google_genai:gemini-3.5-flash")
+
+
+def test_build_agent_passes_middleware_through_to_create_agent() -> None:
+    fake_model = GenericFakeChatModel(messages=iter([AIMessage(content="ok")]))
+    sentinel_middleware = object()
+
+    with patch("eaa.agent.graph.create_agent") as mock_create_agent:
+        graph.build_agent(tools=[], model=fake_model, middleware=[sentinel_middleware])
+
+    assert mock_create_agent.call_args.kwargs["middleware"] == [sentinel_middleware]
