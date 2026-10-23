@@ -6,14 +6,18 @@ phase) and [`docs/decisions/`](docs/decisions/) for ADRs.
 
 ## Status
 
-**Phase 1 — shipped**: a DuckDB data warehouse (consumption, production mix by
-source, day-ahead spot prices — RTE éCO2mix + ENTSO-E) and an MCP server exposing
-it, plus project 1's forecasting API (`france-electricity-forecasting`), as four
-tools (`get_schema`, `run_sql_query`, `get_latest_forecast`, `get_forecast_history`).
-All code is built and tested (49 tests); the éCO2mix connector is verified against
-the real API, but the ENTSO-E day-ahead price connector is still pending real-API
-verification (requires an API token requested by email — see
-[ADR 0001](docs/decisions/0001-entsoe-day-ahead-prices.md)).
+**Phase 1 — shipped and verified against both real APIs**: a DuckDB data warehouse
+(consumption, production mix by source, day-ahead spot prices — RTE éCO2mix +
+ENTSO-E) and an MCP server exposing it, plus project 1's forecasting API
+(`france-electricity-forecasting`), as four tools (`get_schema`, `run_sql_query`,
+`get_latest_forecast`, `get_forecast_history`). All code is built and tested (109
+tests). Both connectors are verified against their real APIs: éCO2mix, and now
+ENTSO-E too, once its API token was approved (see
+[ADR 0001](docs/decisions/0001-entsoe-day-ahead-prices.md)) — that first real run
+surfaced ENTSO-E's October 2025 switch to 15-minute price resolution, fixed by
+averaging to the hour (see
+[ADR 0006](docs/decisions/0006-entsoe-15-minute-resolution.md)). The warehouse is
+now fully backfilled from 2024-02-01 through today across all three tables.
 
 **Phase 2 — shipped, verified against a real LLM call**: a LangGraph ReAct agent
 (Gemini by default, via Google GenAI — swapped in for Claude for budget reasons, see
@@ -33,22 +37,21 @@ hallucinated number.
 Gemini 3.5 Flash against two local Ollama models (`llama3.2`, `llama3.1:8b`) on
 accuracy, tool use, cost, and latency over 15 questions (5 lookup, 5 aggregation, 5
 multi-tool), with Langfuse tracing (verified working against the real cloud
-dashboard). All code is built and tested (107 tests). A real run against a
-partially-backfilled warehouse (éCO2mix only -- ENTSO-E day-ahead prices are still
-blocked on Phase 1's token, see
-[ADR 0001](docs/decisions/0001-entsoe-day-ahead-prices.md)) surfaced three real bugs
-invisible to the mocked suite -- a provider rate limit crashing the whole run, a
-ground-truth query picking up a not-yet-reported NULL hour, and a scoring regex
-grabbing the wrong number out of a verbose answer -- all fixed, plus a retry/backoff
-middleware and a report section explaining how to read a 0% row (see
+dashboard). All code is built and tested (109 tests). The run documented in
+`docs/benchmark_report.md` predates the ENTSO-E token (see ADR 0001/0006) and used
+a warehouse backfilled from éCO2mix only, which surfaced three real bugs invisible
+to the mocked suite -- a provider rate limit crashing the whole run, a ground-truth
+query picking up a not-yet-reported NULL hour, and a scoring regex grabbing the
+wrong number out of a verbose answer -- all fixed, plus a retry/backoff middleware
+and a report section explaining how to read a 0% row (see
 [ADR 0005](docs/decisions/0005-first-benchmark-run-fixes.md)). After the fixes,
-accuracy is still 0% for every model in this partial run, for two distinct and
-diagnosed reasons: Gemini's free-tier quota (5 req/min) is too tight for even one
-model's 15-question run, and the two Ollama models guess at the SQL schema instead of
-calling `get_schema` first -- a genuine capability gap, not a bug. See
-`docs/benchmark_report.md` for the full report. A fair, complete run still needs the
-ENTSO-E token, project 1's forecasting API actually running, and either a paid Gemini
-key or a slower pace to clear free-tier quota windows.
+accuracy was still 0% for every model in that run, for two distinct and diagnosed
+reasons: Gemini's free-tier quota (5 req/min) is too tight for even one model's
+15-question run, and the two Ollama models guess at the SQL schema instead of
+calling `get_schema` first -- a genuine capability gap, not a bug. The warehouse is
+now fully backfilled (ADR 0001/0006), closing the price-data gap; a fair, complete
+re-run still needs project 1's forecasting API actually running and either a paid
+Gemini key or a slower pace to clear free-tier quota windows.
 
 ## Getting started (Phase 1)
 
@@ -64,8 +67,7 @@ uv run eaa-mcp-server        # serves get_schema / run_sql_query / get_latest_fo
 
 Until `ENTSOE_API_TOKEN` is set to a real token, `warehouse backfill` and
 `warehouse refresh` exit immediately with a clear `SystemExit` ("Missing required
-environment variable(s): ENTSOE_API_TOKEN") — this is expected, not a bug, and is
-the current blocker for real-data verification tracked in ADR 0001.
+environment variable(s): ENTSOE_API_TOKEN") — this is expected, not a bug.
 
 ```bash
 uv run pytest        # test suite
@@ -113,6 +115,7 @@ prices yet) and `FORECAST_API_URL` pointed at an unreachable host (project 1's
 forecasting API wasn't running that round) — see
 [ADR 0005](docs/decisions/0005-first-benchmark-run-fixes.md) for what that run found
 and fixed. `lookup-4`, `aggregation-3` (price questions) and all 5 `multi_tool`
-questions fail cleanly on those known gaps, not silently. Once the ENTSO-E token
-closes the data gap and project 1's API is reachable, re-run the benchmark and commit
-the regenerated `docs/benchmark_report.md` for a complete, fair comparison.
+questions failed cleanly on those known gaps, not silently. The warehouse is now
+fully backfilled (ADR 0001/0006), so `lookup-4`/`aggregation-3` have real data to
+query; once project 1's API is reachable too, re-run the benchmark and commit the
+regenerated `docs/benchmark_report.md` for a complete, fair comparison.

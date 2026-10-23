@@ -8,28 +8,25 @@ prices, explicitly unverified pending real API access.
 ## Decision
 ENTSO-E's Transparency Platform (A44 Publication_MarketDocument) is implemented as
 the day-ahead price connector (`src/eaa/ingestion/entsoe.py`), against the publicly
-documented schema. **Real-API verification is still pending** — it requires a human
-to register an account at https://transparency.entsoe.eu and request a security
-token by email (turnaround: minutes to days), which did not happen during automated
-implementation. Until that verification happens, treat `tests/fixtures/entsoe_sample.xml`
-and the parsing XPath expressions in `parse_day_ahead_prices` as unverified against
-reality, even though all current tests pass against the documented-schema fixture.
+documented schema.
 
-**Before trusting this connector against production data:**
-1. Obtain an `ENTSOE_API_TOKEN` (see above) and set it in `.env`.
-2. Run: `uv run python -c "from datetime import date; from eaa.ingestion.entsoe import fetch_day_ahead_prices; print(fetch_day_ahead_prices(date(2026, 1, 1), date(2026, 1, 2)))"`.
-3. If it raises `xml.etree.ElementTree.ParseError` or `entsoe.EntsoeError`, capture the
-   real response text, replace `tests/fixtures/entsoe_sample.xml` with it, and adjust
-   `parse_day_ahead_prices`'s XPath expressions to match the real structure.
-4. Update this ADR's Decision/Consequences sections with the actual outcome once
-   verified.
+**Real-API verification is done.** The ENTSO-E account's API role was approved and
+a `Web API Security Token` generated on 2026-10-23. A full backfill
+(`uv run warehouse backfill`, 2024-02-01 through today) ran successfully against the
+real API: `day_ahead_prices_hourly` now holds 23,462 rows through 2026-10-23. The
+documented A44 schema and `parse_day_ahead_prices`'s XPath expressions matched the
+real response as-is, with one real gap found and fixed along the way — ENTSO-E
+switched French day-ahead prices from hourly (PT60M) to 15-minute (PT15M)
+resolution on 2025-10-01, which the original parser didn't handle. See
+[ADR 0006](0006-entsoe-15-minute-resolution.md).
 
 ## Alternatives considered
 - RTE's own data portal: no equivalent free day-ahead price dataset found via ODRÉ.
 - Scraping the EPEX Spot public results page: rejected — fragile, no stable API.
 
 ## Consequences
-Real-API verification is a blocking prerequisite before this connector is used for
-anything beyond unit tests against the documented-schema fixture. The `warehouse`
-table `day_ahead_prices_hourly` will remain empty until `backfill_into`/`refresh_into`
-are actually run against live, verified data.
+`day_ahead_prices_hourly` is now populated for the full study window, closing the
+data gap that `lookup-4`, `aggregation-3` and (indirectly, as one of several tools)
+the `multi_tool` benchmark questions depend on (see
+[ADR 0005](0005-first-benchmark-run-fixes.md)). A fair benchmark re-run still needs
+project 1's forecasting API running and Gemini's free-tier quota addressed.
