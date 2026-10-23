@@ -2,8 +2,10 @@
 
 Targets the A44 (price) document schema as publicly documented. `{*}` wildcard
 namespace matching is used throughout so a minor schema-version change in
-ENTSO-E's namespace URI doesn't silently break parsing. Not yet verified against
-a real response — see Task 8 / docs/decisions/0001-entsoe-day-ahead-prices.md.
+ENTSO-E's namespace URI doesn't silently break parsing. Verified against a
+real response -- see docs/decisions/0001-entsoe-day-ahead-prices.md and
+docs/decisions/0006-entsoe-15-minute-resolution.md (the PT15M switch found
+during that verification).
 """
 
 from __future__ import annotations
@@ -25,6 +27,13 @@ class EntsoeError(RuntimeError):
     """Raised when the ENTSO-E API returns an error or an unparseable response."""
 
 
+# ENTSO-E's A44 resolution codes this connector understands, in minutes per
+# Point. France switched from PT60M to PT15M on 2025-10-01 (EU-wide 15-minute
+# Market Time Unit rollout); the warehouse stays hourly throughout, so PT15M
+# points are averaged down to the clock hour they fall in.
+_MINUTES_PER_POINT = {"PT60M": 60, "PT15M": 15}
+
+
 def parse_day_ahead_prices(xml_text: str) -> pd.DataFrame:
     """Parse an A44 Publication_MarketDocument into (datetime, price_eur_mwh) rows."""
     root = ET.fromstring(xml_text)
@@ -34,7 +43,8 @@ def parse_day_ahead_prices(xml_text: str) -> pd.DataFrame:
         for period in timeseries.findall("{*}Period"):
             start_str = period.findtext("{*}timeInterval/{*}start")
             resolution = period.findtext("{*}resolution")
-            if start_str is None or resolution != "PT60M":
+            minutes_per_point = _MINUTES_PER_POINT.get(resolution)
+            if start_str is None or minutes_per_point is None:
                 continue
             period_start = datetime.strptime(start_str, "%Y-%m-%dT%H:%MZ").replace(tzinfo=UTC)
             for point in period.findall("{*}Point"):
@@ -45,23 +55,25 @@ def parse_day_ahead_prices(xml_text: str) -> pd.DataFrame:
                     raise EntsoeError(
                         f"Malformed Point in ENTSO-E response at period starting {start_str}: {exc}"
                     ) from exc
+                point_time = period_start + timedelta(minutes=minutes_per_point * (position - 1))
                 rows.append(
                     {
                         # naive UTC: warehouse.upsert_prices requires one consistent
                         # datetime dtype across the batch
-                        "datetime": (period_start + timedelta(hours=position - 1)).replace(
-                            tzinfo=None
+                        "datetime": point_time.replace(
+                            minute=0, second=0, microsecond=0, tzinfo=None
                         ),
                         "price_eur_mwh": price,
                     }
                 )
 
     if not rows:
-        raise EntsoeError("No hourly (PT60M) price points found in ENTSO-E response")
+        raise EntsoeError("No PT60M/PT15M price points found in ENTSO-E response")
 
     return (
         pd.DataFrame(rows)
-        .drop_duplicates(subset="datetime")
+        .groupby("datetime", as_index=False)["price_eur_mwh"]
+        .mean()
         .sort_values("datetime")
         .reset_index(drop=True)
     )

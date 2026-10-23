@@ -20,6 +20,31 @@ def test_parse_day_ahead_prices_reads_hourly_points() -> None:
     assert df.loc[2, "datetime"] == datetime(2026, 1, 2, 1, 0, tzinfo=UTC).replace(tzinfo=None)
 
 
+def test_parse_day_ahead_prices_aggregates_quarter_hourly_points_to_hourly_mean() -> None:
+    # ENTSO-E switched French day-ahead prices from PT60M to PT15M resolution
+    # on 2025-10-01 (EU-wide 15-minute Market Time Unit rollout). The warehouse
+    # stays hourly, so four PT15M points in the same clock hour must average
+    # into one row.
+    xml_text = (
+        '<?xml version="1.0"?>'
+        '<Publication_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3">'
+        "<TimeSeries><Period>"
+        "<timeInterval><start>2026-01-01T23:00Z</start><end>2026-01-02T00:00Z</end></timeInterval>"
+        "<resolution>PT15M</resolution>"
+        "<Point><position>1</position><price.amount>40.0</price.amount></Point>"
+        "<Point><position>2</position><price.amount>42.0</price.amount></Point>"
+        "<Point><position>3</position><price.amount>44.0</price.amount></Point>"
+        "<Point><position>4</position><price.amount>46.0</price.amount></Point>"
+        "</Period></TimeSeries>"
+        "</Publication_MarketDocument>"
+    )
+    df = entsoe.parse_day_ahead_prices(xml_text)
+
+    assert len(df) == 1
+    assert df.loc[0, "datetime"] == datetime(2026, 1, 1, 23, 0, tzinfo=UTC).replace(tzinfo=None)
+    assert df.loc[0, "price_eur_mwh"] == pytest.approx(43.0)
+
+
 def test_parse_day_ahead_prices_raises_on_empty_response() -> None:
     empty = (
         '<?xml version="1.0"?>'
