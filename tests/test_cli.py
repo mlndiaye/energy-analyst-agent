@@ -35,7 +35,13 @@ def test_main_exits_when_entsoe_token_missing(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.delenv("ENTSOE_API_TOKEN", raising=False)
     monkeypatch.setattr("sys.argv", ["warehouse", "backfill"])
 
-    with patch("eaa.cli.backfill") as mock_backfill, pytest.raises(SystemExit):
+    # main() calls load_dotenv(), which would otherwise reload the repo's
+    # real .env (and its real token) and defeat the delenv above.
+    with (
+        patch("eaa.cli.load_dotenv"),
+        patch("eaa.cli.backfill") as mock_backfill,
+        pytest.raises(SystemExit),
+    ):
         cli.main()
 
     mock_backfill.assert_not_called()
