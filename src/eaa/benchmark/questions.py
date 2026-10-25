@@ -15,8 +15,6 @@ import duckdb
 
 from eaa.mcp.forecast_client import fetch_forecast_history, fetch_latest_forecast
 
-FORECAST_API_URL = os.environ.get("FORECAST_API_URL", "http://localhost:8000")
-
 Category = Literal["lookup", "aggregation", "multi_tool"]
 
 
@@ -183,12 +181,17 @@ _AGGREGATION_QUESTIONS = [
 
 
 def _latest_q50_first_hour() -> float:
-    latest = fetch_latest_forecast(FORECAST_API_URL)
+    # Read fresh, not from a module-level constant: this module is imported
+    # (and any such constant captured) before the benchmark CLI's
+    # load_dotenv() call, so a stale default would silently ignore .env.
+    forecast_api_url = os.environ.get("FORECAST_API_URL", "http://localhost:8000")
+    latest = fetch_latest_forecast(forecast_api_url)
     return latest[0]["q50_pred"]
 
 
 def _history_rte_pred_values() -> list[float]:
-    history = fetch_forecast_history(FORECAST_API_URL)
+    forecast_api_url = os.environ.get("FORECAST_API_URL", "http://localhost:8000")
+    history = fetch_forecast_history(forecast_api_url)
     return [row["rte_pred"] for row in history]
 
 

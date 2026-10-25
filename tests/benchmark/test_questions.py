@@ -1,5 +1,8 @@
+from unittest.mock import patch
+
 import duckdb
 
+from eaa.benchmark import questions
 from eaa.benchmark.questions import QUESTIONS
 
 
@@ -37,6 +40,30 @@ def test_multi_tool_questions_expect_two_distinct_tools() -> None:
     for q in QUESTIONS:
         if q.category == "multi_tool":
             assert len(set(q.expected_tools)) == 2
+
+
+def test_latest_q50_first_hour_reads_forecast_api_url_at_call_time(
+    monkeypatch,
+) -> None:
+    # questions.py is imported once, well before a benchmark run sets
+    # FORECAST_API_URL from .env -- a module-level constant captured at
+    # import time would silently keep using whatever (possibly wrong)
+    # default was in effect then. Ground truth must read the env var fresh.
+    monkeypatch.setenv("FORECAST_API_URL", "http://example-live-value:9999")
+    with patch(
+        "eaa.benchmark.questions.fetch_latest_forecast", return_value=[{"q50_pred": 1.0}]
+    ) as mock_fetch:
+        questions._latest_q50_first_hour()
+
+    assert mock_fetch.call_args.args[0] == "http://example-live-value:9999"
+
+
+def test_history_rte_pred_values_reads_forecast_api_url_at_call_time(monkeypatch) -> None:
+    monkeypatch.setenv("FORECAST_API_URL", "http://example-live-value:9999")
+    with patch("eaa.benchmark.questions.fetch_forecast_history", return_value=[]) as mock_fetch:
+        questions._history_rte_pred_values()
+
+    assert mock_fetch.call_args.args[0] == "http://example-live-value:9999"
 
 
 # eco2mix's hourly resample fills a not-yet-reported ("gap") hour with NULL
