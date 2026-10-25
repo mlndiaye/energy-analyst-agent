@@ -44,6 +44,31 @@ async def test_run_one_scores_accuracy_tool_use_cost_and_latency() -> None:
     assert result.latency_seconds >= 0
 
 
+async def test_run_one_scores_a_multi_part_gemini_style_answer() -> None:
+    # Gemini's adaptive thinking returns AIMessage.content as a list of typed
+    # blocks (e.g. {"type": "thinking", ...} + {"type": "text", ...}) rather
+    # than a plain string. Scoring must read the text part, not crash trying
+    # to regex-search a list.
+    fake_agent = MagicMock()
+    answer = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Let me compute this..."},
+            {"type": "text", "text": "The value is 42.0."},
+        ],
+        tool_calls=[{"name": "run_sql_query", "args": {"query": "SELECT 1"}, "id": "c1"}],
+        usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+    )
+    fake_agent.ainvoke = AsyncMock(
+        return_value={"messages": [HumanMessage(content="What is the value?"), answer]}
+    )
+
+    result = await runner.run_one(_question(), "gemini-3.5-flash", fake_agent, con=None)
+
+    assert result.error is None
+    assert result.correct is True
+    assert result.extracted == 42.0
+
+
 async def test_run_benchmark_iterates_every_model_and_question() -> None:
     fake_agent = MagicMock()
     fake_agent.ainvoke = AsyncMock(

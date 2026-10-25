@@ -69,7 +69,12 @@ async def run_one(
         latency = time.perf_counter() - start
 
         messages = result["messages"]
-        answer_text = messages[-1].content
+        # .text, not .content: Gemini's adaptive thinking returns content as
+        # a list of typed blocks ({"type": "thinking", ...}, {"type": "text",
+        # ...}) rather than a plain string. .text is LangChain's own accessor
+        # that extracts just the text parts, and works for a plain-string
+        # content too (e.g. Ollama's).
+        answer_text = messages[-1].text
         tool_calls = extract_tool_calls(messages)
 
         accuracy = score_accuracy(question, con, answer_text)
