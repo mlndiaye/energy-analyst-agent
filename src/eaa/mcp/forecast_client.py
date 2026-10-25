@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import requests
@@ -16,9 +17,9 @@ def fetch_latest_forecast(base_url: str) -> list[dict]:
     try:
         response = requests.get(f"{base_url}/forecast/latest", timeout=10)
         response.raise_for_status()
-    except requests.RequestException as exc:
+        return response.json()
+    except (requests.RequestException, json.JSONDecodeError) as exc:
         raise ForecastAPIError(f"forecast API error: {exc}") from exc
-    return response.json()
 
 
 def fetch_forecast_history(
@@ -33,6 +34,6 @@ def fetch_forecast_history(
     try:
         response = requests.get(f"{base_url}/forecast/history", params=params, timeout=10)
         response.raise_for_status()
-    except requests.RequestException as exc:
+        return response.json()
+    except (requests.RequestException, json.JSONDecodeError) as exc:
         raise ForecastAPIError(f"forecast API error: {exc}") from exc
-    return response.json()

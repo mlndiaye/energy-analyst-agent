@@ -28,6 +28,26 @@ def test_fetch_latest_forecast_wraps_connection_errors() -> None:
     assert raised
 
 
+def test_fetch_latest_forecast_wraps_non_json_response() -> None:
+    # A 200 response whose body isn't JSON (e.g. another service squatting the
+    # configured port and serving an HTML page) must not crash with a raw
+    # JSONDecodeError -- it's an unreachable-forecast-API condition like any
+    # other, and callers only catch ForecastAPIError.
+    import json
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.side_effect = json.JSONDecodeError("Expecting value", "<html>", 0)
+
+    with patch("eaa.mcp.forecast_client.requests.get", return_value=mock_response):
+        try:
+            forecast_client.fetch_latest_forecast("http://localhost:8000")
+            raised = False
+        except forecast_client.ForecastAPIError:
+            raised = True
+    assert raised
+
+
 def test_fetch_latest_forecast_wraps_http_errors() -> None:
     import requests
 
