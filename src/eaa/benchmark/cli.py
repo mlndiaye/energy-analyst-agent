@@ -36,10 +36,14 @@ async def _run() -> None:
     tools = await get_mcp_tools(mcp_url)
     con = warehouse.get_connection(read_only=True)
 
+    # num_predict caps a local model's output: without it, a degenerate
+    # generation loop has no limit on wall-clock time -- seen for real as a
+    # single llama3.2 call that ran for 2h17m and emitted 327k tokens before
+    # Ollama's own safety limit (10x the context window) finally cut it off.
     models = {
         "gemini-3.5-flash": init_chat_model("google_genai:gemini-3.5-flash"),
-        "ollama:llama3.2": init_chat_model("ollama:llama3.2"),
-        "ollama:llama3.1:8b": init_chat_model("ollama:llama3.1:8b"),
+        "ollama:llama3.2": init_chat_model("ollama:llama3.2", num_predict=2048),
+        "ollama:llama3.1:8b": init_chat_model("ollama:llama3.1:8b", num_predict=2048),
     }
 
     callbacks = build_langfuse_callbacks()
